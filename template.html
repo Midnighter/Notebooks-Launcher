@@ -1,0 +1,16 @@
+<html>
+    <head>
+        <title>{% block title %}{{ mytitle }}{% end %}</title>
+    </head>
+    <body>
+        <h1>{{ mytitle }}</h1>
+        <table align="center">
+            {% for row in students %}
+                <tr>
+                    <td><a href="http://{{ server_adress }}:{{ row["port"] }}" target="_blank">{{ escape(row["name"]) }} {{ escape(row["surname"]) }}</a></td>
+                </tr>
+            {% end %}
+        </table>
+    </body>
+</html>
+
