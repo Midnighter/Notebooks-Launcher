@@ -32,23 +32,43 @@ import tornado.template
 
 
 class MainHandler(tornado.web.RequestHandler):
+    """
+    Tornado webserver subclass.
+
+    An instance of this class can be bound to an address and port and it will
+    handle http requests to those.
+    """
 
     def initialize(self, title, server, students):
+        """
+        This method negates the need for an __init__ method.
+        """
         loader = tornado.template.Loader(os.getcwd())
         self.content = loader.load("template.html").generate(mytitle=title,
                 server_adress=server, students=students)
 
     def get(self):
+        """
+        Any http get requests will call this method.
+        """
         self.write(self.content)
 
 
 def assume_user(uid, gid):
+    """
+    Simple helper that returns a function that will be called by subprocess
+    pipes just prior to executing their command.
+    """
     def result():
         os.setgid(gid)
         os.setuid(uid)
     return result
 
 def launch_user_instance(user, config):
+    """
+    Launches an IPython Notebook for a specified user in an environment defined
+    by config.
+    """
     # check for existance of user
     name = user["email"].split("@")[0]
     name = name.split(".")
@@ -73,6 +93,9 @@ def launch_user_instance(user, config):
             preexec_fn=assume_user(pw_entry.pw_uid, pw_entry.pw_gid))
 
 def parse_config(filename):
+    """
+    Handles parsing the configuration file and sets some default values.
+    """
     config = ConfigParser.SafeConfigParser(allow_no_value=True)
     config.read(filename)
     data = dict()
@@ -95,7 +118,8 @@ def parse_config(filename):
     data["server"] = config.get("Launch", "server_address")
     # if no server was provided just use the ip of the localhost
     if not data["server"]:
-        interfaces = [ip for ip in socket.gethostbyname_ex(socket.gethostname())[2]\
+        interfaces = [ip for ip in\
+                socket.gethostbyname_ex(socket.gethostname())[2]\
                 if not ip == "127.0.0.1"]
         data["server"] = str(interfaces[0])
     data["title"] = config.get("Launch", "web_title")
@@ -103,6 +127,13 @@ def parse_config(filename):
 
 
 def main(argv):
+    """
+    Parse students, parse configuration, launch notebook for each student, write
+    back information, and launch webserver.
+
+    Maybe the webserver could be deamonized but I like having the output in a
+    'screen' instance, for example.
+    """
     # basic sanity checks
     if len(argv) >= 1:
         filename = str(argv[0])
@@ -132,7 +163,8 @@ def main(argv):
         writer.writerows(students)
     # generate webserver with content
     application = tornado.web.Application([(r"/", MainHandler,
-        dict(title=config["title"], server=config["server"], students=students)),])
+            dict(title=config["title"], server=config["server"],
+            students=students)),])
     application.listen(config["port"])
     tornado.ioloop.IOLoop.instance().start()
 

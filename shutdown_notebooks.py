@@ -27,6 +27,9 @@ import subprocess
 
 
 def kill_notebooks(user):
+    """
+    Finds IPython Notebook instances running for the user and kills them.
+    """
     # check for existance of user
     name = user["email"].split("@")[0]
     name = name.split(".")
@@ -45,19 +48,24 @@ def kill_notebooks(user):
     (stdout, stderr) = p2.communicate()
     if stderr:
         raise OSError(p2.returncode, stderr)
-    elif p2.returncode != 0:
+    elif stdout and p2.returncode != 0:
         raise OSError(p2.returncode, stdout)
-    stdout = stdout.split("\n")
-    for line in stdout:
-        try:
-            os.kill(int(line.split()[0]), signal.SIGHUP)
-        except ValueError:
-            continue
-        except IndexError:
-            break
+    elif p2.returncode == 0:
+        stdout = stdout.split("\n")
+        for line in stdout:
+            try:
+                os.kill(int(line.split()[0]), signal.SIGHUP)
+            except ValueError:
+                continue
+            except IndexError:
+                break
     user["port"] = ""
 
 def main(argv):
+    """
+    Parses student file, kills IPython Notebooks of each student, and writes out
+    information.
+    """
     # basic sanity checks
     if len(argv) >= 1:
         filename = str(argv[0])

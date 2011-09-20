@@ -29,15 +29,15 @@ import string
 import random
 import csv
 import ConfigParser
-#import logging
-
-
-#logger = logging.getLogger(__name__)
-#logger.setLevel(logging.INFO)
-#logger.addHandler(logging.StreamHandler())
 
 
 def tree_copy(src, dst):
+    """
+    Iteratively copies a folder structure to a destination rooted somewhere
+    else.
+
+    Ignores symlinks and mount points.
+    """
     if not os.path.exists(dst):
         os.makedirs(dst)
     for name in os.listdir(src):
@@ -52,6 +52,13 @@ def tree_copy(src, dst):
 
 
 def create_user_environment(user, config):
+    """
+    Sets up the user working directories needed.
+
+    Creates a user account if necessary, creates a password for it, adds it to
+    a general usergroup, copies specified material into the user directory, and
+    makes the user the owner of those files and directories.
+    """
     # check for existance of user
     name = user["email"].split("@")[0]
     name = name.split(".")
@@ -60,43 +67,45 @@ def create_user_environment(user, config):
         pw_entry = pwd.getpwnam(username)
     except KeyError:
         # add a new user
-        p = subprocess.Popen(["useradd", "-m", "-G", config.get("Setup",
+        ps = subprocess.Popen(["useradd", "-m", "-G", config.get("Setup",
                 "group"), username],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        (stdout, stderr) = p.communicate()
+        (stdout, stderr) = ps.communicate()
         if stderr:
-            raise OSError(p.returncode, stderr)
-        elif p.returncode != 0:
-            raise OSError(p.returncode, stdout)
+            raise OSError(ps.returncode, stderr)
+        elif ps.returncode != 0:
+            raise OSError(ps.returncode, stdout)
         # set the (weak) password using numbers, letters, and the exclamation
         # mark
         user["password"] = "".join(random.choice(config["passwd_selection"]\
                 for x in range(config["passwd_length"])))
-        p = subprocess.Popen(["passwd", "--stdin", username],
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        (stdout, stderr) = p.communicate(user["password"])
+        ps = subprocess.Popen(["passwd", "--stdin", username],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE)
+        (stdout, stderr) = ps.communicate(user["password"])
         if stderr:
-            raise OSError(p.returncode, stderr)
-        elif p.returncode != 0:
-            raise OSError(p.returncode, stdout)
+            raise OSError(ps.returncode, stderr)
+        elif ps.returncode != 0:
+            raise OSError(ps.returncode, stdout)
         pw_entry = pwd.getpwnam(username)
     # potentially add the user to the desired (supplementary) group
     grp_entry = grp.getgrnam(config["group"])
     if not username in grp_entry.gr_mem:
-        p = subprocess.Popen(["usermod", "-aG", config["group"], username],
+        ps = subprocess.Popen(["usermod", "-aG", config["group"], username],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        (stdout, stderr) = p.communicate()
+        (stdout, stderr) = ps.communicate()
         if stderr:
-            raise OSError(p.returncode, stderr)
-        elif p.returncode != 0:
-            raise OSError(p.returncode, stdout)
+            raise OSError(ps.returncode, stderr)
+        elif ps.returncode != 0:
+            raise OSError(ps.returncode, stdout)
     # copy content of material_dir into user directory
     destination_path = os.path.join(pw_entry.pw_dir, config["tutorial_dir"])
     material = os.path.basename(config["material_dir"])
     if not material:
         material = os.path.dirname(config["material_dir"])
     try:
-        tree_copy(config["material_dir"], os.path.join(destination_path, material))
+        tree_copy(config["material_dir"],
+                os.path.join(destination_path, material))
     except shutil.Error:
         raise OSError(errno.ENOENT,
                 "copying files for user '%s' failed" % username)
@@ -114,6 +123,9 @@ def create_user_environment(user, config):
                 os.chown(file_path, pw_entry.pw_uid, pw_entry.pw_gid)
 
 def parse_config(filename):
+    """
+    Handles parsing of the configuration file.
+    """
     config = ConfigParser.SafeConfigParser(allow_no_value=True)
     config.read(filename)
     data = dict()
@@ -132,6 +144,10 @@ def parse_config(filename):
 
 
 def main(argv):
+    """
+    Parse the student file, parse the configuration, adds the general usergroup,
+    creates each student as a system user, writes out information.
+    """
     # basic sanity checks
     if len(argv) >= 1:
         filename = str(argv[0])
@@ -148,16 +164,16 @@ def main(argv):
     config = parse_config(config_file)
     # should add the group if it doesn't exist already
     try:
-        p = subprocess.Popen(["groupadd", "-f", config.get("Setup", "group")],
+        ps = subprocess.Popen(["groupadd", "-f", config.get("Setup", "group")],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     except OSError as err:
         print "Did you run this script with superuser privileges?"
         sys.exit(err.errno)
-    (stdout, stderr) = p.communicate()
+    (stdout, stderr) = ps.communicate()
     if stderr:
-        raise OSError(p.returncode, stderr)
-    elif p.returncode != 0:
-        raise OSError(p.returncode, stdout)
+        raise OSError(ps.returncode, stderr)
+    elif ps.returncode != 0:
+        raise OSError(ps.returncode, stdout)
     # get the list of tutorial members
     with open(filename, "r") as file_handle:
         reader = csv.DictReader(file_handle)
