@@ -29,6 +29,8 @@ import string
 import random
 import csv
 import ConfigParser
+import time
+import pexpect
 
 
 def tree_copy(src, dst):
@@ -67,8 +69,7 @@ def create_user_environment(user, config):
         pw_entry = pwd.getpwnam(username)
     except KeyError:
         # add a new user
-        ps = subprocess.Popen(["useradd", "-m", "-G", config.get("Setup",
-                "group"), username],
+        ps = subprocess.Popen(["useradd", "-m", "-G", config["group"], username],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         (stdout, stderr) = ps.communicate()
         if stderr:
@@ -77,16 +78,23 @@ def create_user_environment(user, config):
             raise OSError(ps.returncode, stdout)
         # set the (weak) password using numbers, letters, and the exclamation
         # mark
-        user["password"] = "".join(random.choice(config["passwd_selection"]\
-                for x in range(config["passwd_length"])))
-        ps = subprocess.Popen(["passwd", "--stdin", username],
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE)
-        (stdout, stderr) = ps.communicate(user["password"])
-        if stderr:
-            raise OSError(ps.returncode, stderr)
-        elif ps.returncode != 0:
-            raise OSError(ps.returncode, stdout)
+        user["password"] = "".join(random.choice(config["passwd_selection"])\
+                for x in range(config["passwd_length"]))
+# the --stdin parameter to passwd is not stable, and if the user already exists
+# this fails anyway, so the pexpect version is better
+#        ps = subprocess.Popen(["passwd", "--stdin", username],
+#                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+#                stderr=subprocess.PIPE)
+#        (stdout, stderr) = ps.communicate(user["password"])
+#        if stderr:
+#            raise OSError(ps.returncode, stderr)
+#        elif ps.returncode != 0:
+#            raise OSError(ps.returncode, stdout)
+        passwd = pexpect.spawn("passwd %s" % username)
+        for repeat in (1, 2):
+            passwd.expect("password: ")
+            passwd.sendline(user["password"])
+            time.sleep(0.1)
         pw_entry = pwd.getpwnam(username)
     # potentially add the user to the desired (supplementary) group
     grp_entry = grp.getgrnam(config["group"])
@@ -130,9 +138,6 @@ def parse_config(filename):
     config.read(filename)
     data = dict()
     data["tutorial_dir"] = config.get("Setup", "tutorial_dir")
-    if not os.path.exists(data["tutorial_dir"]):
-        raise IOError(errno.ENOENT,
-                "No such directory '%s'" % data["tutorial_dir"])
     data["material_dir"] = config.get("Setup", "material_dir")
     if not os.path.exists(data["material_dir"]):
         raise IOError(errno.ENOENT,
@@ -164,15 +169,17 @@ def main(argv):
     config = parse_config(config_file)
     # should add the group if it doesn't exist already
     try:
-        ps = subprocess.Popen(["groupadd", "-f", config.get("Setup", "group")],
+        ps = subprocess.Popen(["groupadd", "-f", config["group"]],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     except OSError as err:
-        print "Did you run this script with superuser privileges?"
+        print "\nDid you run this script with superuser privileges?\n"
         sys.exit(err.errno)
     (stdout, stderr) = ps.communicate()
     if stderr:
+        print "\nDid you run this script with superuser privileges?\n"
         raise OSError(ps.returncode, stderr)
     elif ps.returncode != 0:
+        print "\nDid you run this script with superuser privileges?\n"
         raise OSError(ps.returncode, stdout)
     # get the list of tutorial members
     with open(filename, "r") as file_handle:

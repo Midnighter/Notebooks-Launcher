@@ -96,19 +96,42 @@ def parse_config(filename):
     """
     Handles parsing the configuration file and sets some default values.
     """
+
+    def get_local_ip():
+        """
+        This method works unreliably.
+        """
+        return [ip for ip in socket.gethostbyname_ex(socket.gethostname())[2]\
+                if not ip.startswith("127.")]
+
+    def get_network_ip():
+        """
+        Retrieve your network IP by opening a socket to google.
+
+        May not find your public IP if you're behind NAT but often the network
+        IP is just what we want.
+        """
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.connect(('google.com', 0))
+        return sock.getsockname()[0]
+
+    def get_public_ip():
+        """
+        This finds your IP outside the local network and may require port
+        forwarding from your router to the host machine.
+        """
+        import urllib2
+        import re
+        data = str(urllib2.urlopen("http://checkip.dyndns.com/").read())
+        return re.search(r"Address: (\d+\.\d+\.\d+\.\d+)", data).group(1)
+
     config = ConfigParser.SafeConfigParser(allow_no_value=True)
     config.read(filename)
     data = dict()
     data["tutorial_dir"] = config.get("Setup", "tutorial_dir")
-    if not os.path.exists(data["tutorial_dir"]):
-        raise IOError(errno.ENOENT,
-                "No such directory '%s'" % data["tutorial_dir"])
     data["material_dir"] = config.get("Setup", "material_dir")
-    if not os.path.exists(data["material_dir"]):
-        raise IOError(errno.ENOENT,
-                "No such directory '%s'" % data["material_dir"])
     data["launch_dir"] = config.get("Launch", "launch_dir")
-    # if launch_dir was not given we simply use tutorial_dir/material_dir
+    # if launch_dir was not given we simply use tutorial_dir/final_part_of_material_dir
     if not data["launch_dir"]:
         material = os.path.basename(config["material_dir"])
         if not material:
@@ -118,10 +141,12 @@ def parse_config(filename):
     data["server"] = config.get("Launch", "server_address")
     # if no server was provided just use the ip of the localhost
     if not data["server"]:
-        interfaces = [ip for ip in\
-                socket.gethostbyname_ex(socket.gethostname())[2]\
-                if not ip == "127.0.0.1"]
-        data["server"] = str(interfaces[0])
+        interfaces = get_local_ip()
+        interfaces.append(get_network_ip())
+        # if your webserver should be hosted for people outside your network,
+        # you may uncomment the next line
+#        interfaces.append(get_public_ip())
+        data["server"] = str(interfaces[-1])
     data["title"] = config.get("Launch", "web_title")
     return data
 
@@ -162,6 +187,7 @@ def main(argv):
         writer.writerow(dict(zip(fieldnames, fieldnames)))
         writer.writerows(students)
     # generate webserver with content
+    print "\nSpawning webserver at %s:%d\n" % (config["server"], config["port"])
     application = tornado.web.Application([(r"/", MainHandler,
             dict(title=config["title"], server=config["server"],
             students=students)),])

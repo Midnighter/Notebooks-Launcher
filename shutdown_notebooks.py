@@ -55,7 +55,7 @@ def kill_notebooks(user):
         for line in stdout:
             try:
                 os.kill(int(line.split()[0]), signal.SIGHUP)
-            except ValueError:
+            except (OSError, ValueError):
                 continue
             except IndexError:
                 break
