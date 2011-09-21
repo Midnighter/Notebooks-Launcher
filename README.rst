@@ -40,4 +40,8 @@ Requirements
 
 * A running installation of the IPython notebook (http://ipython.org/)
 * probably the code will only work for Python >= 2.6
+* On the hosting machine your firewall needs to allow tcp ports in the range
+  of::
+
+    webserver port -- webserver port + number of students
 
