@@ -38,10 +38,9 @@ require superuser privileges.::
 Requirements
 ------------
 
-* A running installation of the IPython notebook (http://ipython.org/)
+* A running installation of the IPython notebook (http://ipython.org/) which
+  will also require tornado and pexpect
 * probably the code will only work for Python >= 2.6
 * On the hosting machine your firewall needs to allow tcp ports in the range
-  of::
-
-    webserver port -- webserver port + number of students
+  of <webserver port> to <webserver port + number of students>
 
