@@ -33,6 +33,8 @@ require superuser privileges.::
 * The shutdown script kills all IPython notebook kernels running under the user
   names provided, so be careful!
 
+* A sample students.csv and notebooks.cfg file are provided.
+
 Requirements
 ------------
 
