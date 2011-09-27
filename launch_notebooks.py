@@ -128,6 +128,9 @@ def parse_config(filename):
     config = ConfigParser.SafeConfigParser(allow_no_value=True)
     config.read(filename)
     data = dict()
+    data["students_list"] = config.get("Setup", "students_list")
+    if not os.path.exists(data["students_list"]):
+        raise IOError(errno.ENOENT, "No such file '%s'" % data["students_list"])
     data["tutorial_dir"] = config.get("Setup", "tutorial_dir")
     data["material_dir"] = config.get("Setup", "material_dir")
     data["launch_dir"] = config.get("Launch", "launch_dir")
@@ -160,13 +163,7 @@ def main(argv):
     'screen' instance, for example.
     """
     # basic sanity checks
-    if len(argv) >= 1:
-        filename = str(argv[0])
-    else:
-        filename = "students.csv"
-    if not os.path.exists(filename):
-        raise IOError(errno.ENOENT, "No such file '%s'" % filename)
-    if len(argv) == 2:
+    if len(argv) == 1:
         config_file = str(argv[1])
     else:
         config_file = "notebooks.cfg"
@@ -174,7 +171,7 @@ def main(argv):
         raise IOError(errno.ENOENT, "No such file '%s'" % config_file)
     config = parse_config(config_file)
     # get the list of tutorial members
-    with open(filename, "r") as file_handle:
+    with open(config["students_list"], "r") as file_handle:
         reader = csv.DictReader(file_handle)
         fieldnames = reader.fieldnames
         students = [row for row in reader]
@@ -182,7 +179,7 @@ def main(argv):
         user["port"] = str(config["port"] + 1 + i)
         launch_user_instance(user, config)
     # save the student information
-    with open(filename, "w") as file_handle:
+    with open(config["students_list"], "w") as file_handle:
         writer = csv.DictWriter(file_handle, fieldnames)
         writer.writerow(dict(zip(fieldnames, fieldnames)))
         writer.writerows(students)
@@ -196,9 +193,8 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 1 or len(sys.argv) > 3:
-        print "Usage:\nsudo python %s [student list: path [config file: path]]"\
-                % sys.argv[0]
+    if len(sys.argv) > 2:
+        print "Usage:\nsudo python %s [config file: path]" % sys.argv[0]
         sys.exit(2)
     else:
         sys.exit(main(sys.argv[1:]))
