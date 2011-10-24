@@ -32,6 +32,8 @@ import ConfigParser
 import time
 import pexpect
 
+from IPython.utils.path import get_ipython_dir
+
 
 def tree_copy(src, dst):
     """
@@ -106,8 +108,14 @@ def create_user_environment(user, config):
             raise OSError(ps.returncode, stderr)
         elif ps.returncode != 0:
             raise OSError(ps.returncode, stdout)
+    # create the ipython config
+
+    destination_path = os.path.normpath(os.path.join(pw_entry.pw_dir,
+            config["tutorial_dir"]))
+
     # copy content of material_dir into user directory
-    destination_path = os.path.join(pw_entry.pw_dir, config["tutorial_dir"])
+    destination_path = os.path.normpath(os.path.join(pw_entry.pw_dir,
+            config["tutorial_dir"]))
     material = os.path.basename(config["material_dir"])
     if not material:
         material = os.path.dirname(config["material_dir"])
