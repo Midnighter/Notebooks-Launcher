@@ -125,7 +125,7 @@ def parse_config(filename):
         data = str(urllib2.urlopen("http://checkip.dyndns.com/").read())
         return re.search(r"Address: (\d+\.\d+\.\d+\.\d+)", data).group(1)
 
-    config = ConfigParser.SafeConfigParser(allow_no_value=True)
+    config = ConfigParser.SafeConfigParser()
     config.read(filename)
     data = dict()
     data["students_list"] = config.get("Setup", "students_list")
@@ -136,9 +136,9 @@ def parse_config(filename):
     data["launch_dir"] = config.get("Launch", "launch_dir")
     # if launch_dir was not given we simply use tutorial_dir/final_part_of_material_dir
     if not data["launch_dir"]:
-        material = os.path.basename(config["material_dir"])
+        material = os.path.basename(data["material_dir"])
         if not material:
-            material = os.path.dirname(config["material_dir"])
+            material = os.path.dirname(data["material_dir"])
         data["launch_dir"] = os.path.join(data["tutorial_dir"], material)
     data["port"] = config.getint("Launch", "port")
     data["server"] = config.get("Launch", "server_address")
