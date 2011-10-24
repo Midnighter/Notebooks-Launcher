@@ -66,7 +66,8 @@ def parse_config(filename):
     """
     Handles parsing of the configuration file.
     """
-    config = ConfigParser.SafeConfigParser(allow_no_value=True)
+#    config = ConfigParser.SafeConfigParser(allow_no_value=True)
+    config = ConfigParser.SafeConfigParser()
     config.read(filename)
     data = dict()
     data["students_list"] = config.get("Setup", "students_list")

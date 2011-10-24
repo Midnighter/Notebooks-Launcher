@@ -125,6 +125,7 @@ def parse_config(filename):
         data = str(urllib2.urlopen("http://checkip.dyndns.com/").read())
         return re.search(r"Address: (\d+\.\d+\.\d+\.\d+)", data).group(1)
 
+#    config = ConfigParser.SafeConfigParser(allow_no_value=True)
     config = ConfigParser.SafeConfigParser()
     config.read(filename)
     data = dict()
