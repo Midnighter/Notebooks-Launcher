@@ -79,8 +79,8 @@ def launch_user_instance(user, config):
     args = ["screen", "-dmS", username,
             "ipython", "notebook",
             "--pylab=inline",
-            "--IPythonNotebookApp.ws_hostname=%s" % config["server"],
-            "--IPythonNotebookApp.ip=%s" % config["server"],
+            "--ip=%s" % config["server"],
+            "--ws-hostname=%s" % config["server"],
             "--port=%s" % user["port"]]
     cwd = os.path.join(pw_entry.pw_dir, config["launch_dir"])
     env = os.environ.copy()
