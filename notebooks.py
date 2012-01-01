@@ -34,13 +34,12 @@ import time
 import codecs
 import socket
 import pexpect
-import signal
 # non-standard but must for ipython notebook
 import tornado.ioloop
 import tornado.web
 import tornado.template
 
-from IPython.utils.path import get_ipython_dir
+#from IPython.utils.path import get_ipython_dir
 from IPython.lib import passwd
 
 
@@ -606,7 +605,7 @@ def main(argv):
 if __name__ == "__main__":
     argc = len(sys.argv)
     if argc < 2 or argc > 3:
-        LOGGER.critical(u"Usage:\nsudo python %s <setup | launch | shutdown>"\
+        LOGGER.critical(u"Usage:\nsudo python %s <setup | launch | shutdown | remove>"\
                 u" [config file: path]" % sys.argv[0])
         sys.exit(2)
     try:
