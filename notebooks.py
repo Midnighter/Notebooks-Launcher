@@ -110,7 +110,7 @@ def write_database(filename, users, local_dialect="excel", enc="utf-8"):
     """
     with codecs.open(filename, "wb", encoding=enc) as file_handle:
         writer = csv.DictWriter(file_handle, FIELDNAMES, dialect=local_dialect)
-        writer.writeheader()
+        writer.writerow(dict(zip(FIELDNAMES, FIELDNAMES)))
         writer.writerows(users)
 
 def parse_config(filename, enc="utf-8"):
