@@ -285,8 +285,9 @@ def launch_as(pw_entry, args, cwd):
     env["USER"] = pw_entry.pw_name
     # should not fail
 #    subprocess.check_call(args, cwd=cwd, env=env, shell=True,
-    subprocess.check_call(args, cwd=cwd, env=env,
+    output = subprocess.check_output(args, cwd=cwd, env=env,
             preexec_fn=assume_user(pw_entry.pw_uid, pw_entry.pw_gid))
+    return output
 
 
 ################################################################################
@@ -356,8 +357,9 @@ def create_user_environment(user, config):
     cmd = ["ipython", "profile", "create", config["profile"]]
     launch_as(pw_entry, cmd, pw_entry.pw_dir)
     # get_ipython_dir currently returns different results for other users :S
-#    location = os.path.join(pw_entry.pw_dir, get_ipython_dir(),
-    location = os.path.join(pw_entry.pw_dir, u".ipython",
+    cmd = ["python", "ipython_dir.py"]
+    ipython_dir = launch_as(pw_entry, cmd, os.getcwd())
+    location = os.path.join(ipython_dir.strip(),
             u"profile_%s" % config["profile"], u"ipython_notebook_config.py")
     password = passwd(user["nb-pass"])
     with codecs.open(location, "rb", encoding="utf-8") as file_handle:
