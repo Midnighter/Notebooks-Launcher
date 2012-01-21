@@ -49,8 +49,8 @@ from IPython.lib import passwd
 
 
 LOGGER = logging.getLogger()
-#LOGGER.setLevel(logging.WARN)
-LOGGER.setLevel(logging.DEBUG)
+LOGGER.setLevel(logging.WARN)
+#LOGGER.setLevel(logging.DEBUG)
 LOGGER.addHandler(logging.StreamHandler())
 
 
@@ -265,7 +265,7 @@ def assume_user(uid, gid):
         os.setuid(uid)
     return result
 
-def launch_as(pw_entry, args, cwd):
+def launch_as(pw_entry, args, cwd, stdin=None):
     """
     Execute a command under a different user.
 
@@ -284,10 +284,13 @@ def launch_as(pw_entry, args, cwd):
     env["PWD"] = cwd
     env["USER"] = pw_entry.pw_name
     # should not fail
-#    subprocess.check_call(args, cwd=cwd, env=env, shell=True,
-    output = subprocess.check_output(args, cwd=cwd, env=env,
+    prcs = subprocess.Popen(args, cwd=cwd, env=env, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             preexec_fn=assume_user(pw_entry.pw_uid, pw_entry.pw_gid))
-    return output
+    (stdout, stderr) = prcs.communicate(stdin)
+    if prcs.returncode != 0 or stderr:
+        raise subprocess.CalledProcessError(prcs.returncode, args, stderr)
+    return stdout
 
 
 ################################################################################
