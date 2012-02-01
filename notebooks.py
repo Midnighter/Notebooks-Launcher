@@ -49,7 +49,7 @@ from IPython.lib import passwd
 
 
 LOGGER = logging.getLogger()
-LOGGER.setLevel(logging.WARN)
+LOGGER.setLevel(logging.INFO)
 #LOGGER.setLevel(logging.DEBUG)
 LOGGER.addHandler(logging.StreamHandler())
 
@@ -277,6 +277,8 @@ def launch_as(pw_entry, args, cwd, stdin=None):
         A list passed to subprocess that specifies the command.
     cwd: `str`
         Current working directory for the command to be executed in.
+    stdin: `str` (optional)
+        Optional input for the external command.
     """
     env = os.environ.copy()
     env["HOME"] = pw_entry.pw_dir
@@ -288,9 +290,32 @@ def launch_as(pw_entry, args, cwd, stdin=None):
             stderr=subprocess.PIPE,
             preexec_fn=assume_user(pw_entry.pw_uid, pw_entry.pw_gid))
     (stdout, stderr) = prcs.communicate(stdin)
-    if prcs.returncode != 0 or stderr:
+    if prcs.returncode != 0:
         raise subprocess.CalledProcessError(prcs.returncode, args, stderr)
-    return stdout
+    return stdout if stdout else stderr
+
+def execute_command(args, stdin=None, cwd=None, env=None):
+    """
+    Execute a system command.
+
+    Parameters
+    ----------
+    args: `list`
+        A list passed to subprocess that specifies the command.
+    stdin: `str` (optional)
+        Optional input for the external command.
+    cwd: `str` (optional)
+        Current working directory for the command to be executed in.
+    env: dict (optional)
+        A dictionary with the system environment that should replace the current
+        user's.
+    """
+    prcs = subprocess.Popen(args, cwd=cwd, env=env, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE)
+    (stdout, stderr) = prcs.communicate(stdin)
+    if prcs.returncode != 0:
+        raise subprocess.CalledProcessError(prcs.returncode, args, stderr)
+    return stdout if stdout else stderr
 
 
 ################################################################################
@@ -312,7 +337,7 @@ def create_user_environment(user, config):
     except KeyError:
         # add a new user
         try:
-            subprocess.check_call(["useradd", "-m", "-G", config["group"],
+            execute_command(["useradd", "-m", "-G", config["group"],
                     user["username"]])
         except subprocess.CalledProcessError:
             LOGGER.debug(u"pssst:", exc_info=True)
@@ -348,7 +373,7 @@ def create_user_environment(user, config):
                 for x in range(config["passwd length"]))
     if not user["username"] in grp_entry.gr_mem:
         try:
-            subprocess.check_call(["usermod", "-aG", config["group"],
+            execute_command(["usermod", "-aG", config["group"],
                     user["username"]])
         except subprocess.CalledProcessError:
             LOGGER.debug(u"pssst:", exc_info=True)
@@ -395,7 +420,7 @@ def setup(config, users):
     """
     # should add the group if it doesn't exist already
     try:
-        subprocess.check_call(["groupadd", "-f", config["group"]])
+        execute_command(["groupadd", "-f", config["group"]])
     except subprocess.CalledProcessError as err:
         # actually 'groupadd' command succeeds without su powers
         LOGGER.warn("Did you run this script with superuser privileges?")
@@ -403,6 +428,7 @@ def setup(config, users):
     # create users in the list
     for usr in users:
         create_user_environment(usr, config)
+        LOGGER.info(u"Created user '%s'.", usr["username"])
 
 
 ################################################################################
@@ -470,6 +496,7 @@ def launch(config, users):
     for (i, usr) in enumerate(users):
         usr["port"] = str(config["port"] + 1 + i)
         launch_user_instance(usr, config)
+        LOGGER.info(u"Started notebook kernel(s) for user '%s'.", usr["username"])
     # generate webserver with content
     LOGGER.warn("\nSpawning webserver at %s:%d\n", config["server"],
             config["port"])
@@ -491,13 +518,10 @@ def kill_notebooks(user, config):
     """
     # must not fail, i.e., user must exist on the system
     try:
-        subprocess.check_call(["pkill", "-u", user["username"], "-f",
+        execute_command(["pkill", "-u", user["username"], "-f",
                 "ipython notebook"])
     except subprocess.CalledProcessError:
-        LOGGER.debug(u"pssst:", exc_info=True)
-        LOGGER.warn(u"Failed to shutdown %s's running notebook kernel(s).",
-                user["username"])
-        LOGGER.warn(u"Did you run this script with superuser privileges?")
+        pass
     # verify that indeed all processes have been terminated
     try:
         assert 1 == subprocess.call(["pgrep", "-u", user["username"], "-f",
@@ -505,6 +529,7 @@ def kill_notebooks(user, config):
     except AssertionError:
         LOGGER.warn(u"User '%s' still has running notebook kernel(s).",
                 user["username"])
+        LOGGER.warn(u"Did you run this script with superuser privileges?")
     # retrieve user generated material
     try:
         pw_entry = pwd.getpwnam(user["username"])
@@ -523,7 +548,7 @@ def kill_notebooks(user, config):
         tree_copy(source_path, dest_path)
     except shutil.Error:
         LOGGER.debug(u"pssst:", exc_info=True)
-        LOGGER.warn(u"retrieving files for user '%s' failed", user["username"])
+        LOGGER.warn(u"Retrieving files for user '%s' failed.", user["username"])
     user["port"] = u""
 
 def shutdown(config, users):
@@ -532,6 +557,7 @@ def shutdown(config, users):
     """
     for usr in users:
         kill_notebooks(usr, config)
+        LOGGER.info(u"Shutdown notebook kernel(s) for user '%s'.", usr["username"])
     # change the owner of the files in the storage directory
     try:
         owner_entry = pwd.getpwnam(config["owner"])
@@ -554,16 +580,17 @@ def remove(config, users):
     """
     for usr in users:
         try:
-            subprocess.check_call(["passwd", "-d", usr["username"]])
+            execute_command(["passwd", "-d", usr["username"]])
             usr["sys-pass"] = None
-            subprocess.check_call(["userdel", "-r", usr["username"]])
+            execute_command(["userdel", "-r", usr["username"]])
             usr["nb-pass"] = None
+            LOGGER.info(u"Removed user '%s'.", usr["username"])
         except subprocess.CalledProcessError:
             LOGGER.debug(u"pssst:", exc_info=True)
             LOGGER.warn(u"Failed to remove user '%s'.", usr["username"])
-            LOGGER.warn(u"Did you run this script with superuser privileges?")
     try:
-        subprocess.check_call(["groupdel", config["group"]])
+        execute_command(["groupdel", config["group"]])
+        LOGGER.info(u"Removed group '%s'.", config["group"])
     except subprocess.CalledProcessError:
         LOGGER.debug(u"pssst:", exc_info=True)
         LOGGER.warn(u"Failed to remove group '%s'.", config["group"])
