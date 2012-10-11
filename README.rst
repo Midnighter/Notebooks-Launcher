@@ -28,8 +28,8 @@ alternative configuration file may be supplied as an argument.::
   the IPython profile specified in the `config file` exists for the local user,
   the `*.py` files and the `startup/*.py` files are copied to the other users. It
   will also use a predefined directory and copy the material therein into each
-  users' account. Run this script only **once**, since copying of files will be
-  done without mercy for existing files.
+  users' account. **Run the setup only once, since copying of files will be
+  done without mercy for existing files!**
 
 * `launch` assigns a unique port to each user in a dumb way. It does not check
   whether the port is in use. IPython may check it but the change in port is not
