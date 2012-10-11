@@ -34,12 +34,15 @@ import time
 import codecs
 import socket
 import pexpect
+
+from glob import glob
+
 # non-standard but must for ipython notebook
 import tornado.ioloop
 import tornado.web
 import tornado.template
 
-#from IPython.utils.path import get_ipython_dir
+from IPython.utils.path import get_ipython_dir
 from IPython.lib import passwd
 
 
@@ -339,11 +342,10 @@ def create_user_environment(user, config):
         try:
             execute_command(["useradd", "-m", "-G", config["group"],
                     user["username"]])
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as err:
             LOGGER.debug(u"pssst:", exc_info=True)
-            LOGGER.warn(u"Failed to add new user '%s'." % user["username"])
-            LOGGER.warn(u"Did you run this script with superuser privileges?")
-            return
+            LOGGER.warn(err.output.strip())
+            return err.returncode
         # set the (weak) password using numbers, letters, and the exclamation
         # mark
         if not user["sys-pass"]:
@@ -375,21 +377,37 @@ def create_user_environment(user, config):
         try:
             execute_command(["usermod", "-aG", config["group"],
                     user["username"]])
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as err:
             LOGGER.debug(u"pssst:", exc_info=True)
-            LOGGER.warn(u"Failed to add new user '%s' to supplementary group"\
-                    u" '%s'.", user["username"], config["group"])
-            LOGGER.warn(u"Did you run this script with superuser privileges?")
-            return
+            LOGGER.warn(err.output.strip())
+            return err.returncode
     # create the ipython config
     cmd = ["ipython", "profile", "create", config["profile"]]
-    launch_as(pw_entry, cmd, pw_entry.pw_dir)
+    try:
+        launch_as(pw_entry, cmd, pw_entry.pw_dir)
+    except OSError as err:
+        return 1
+    # location of the ipython directory created with the profile
     # get_ipython_dir currently returns different results for other users :S
     cmd = ["python", "ipython_dir.py"]
-    ipython_dir = launch_as(pw_entry, cmd, os.getcwd())
-    location = os.path.join(ipython_dir.strip(),
-            u"profile_%s" % config["profile"], u"ipython_notebook_config.py")
+    user_ipython_dir = launch_as(pw_entry, cmd, os.getcwd()).strip()
+    # if the specified profile exists we copy the contents
+    prfl_loc = os.path.join(get_ipython_dir(), u"profile_%s" % config["profile"])
+    usr_prfl_loc = os.path.join(user_ipython_dir,
+            u"profile_%s" % config["profile"])
+    if os.path.exists(prfl_loc):
+        # copy profile files
+        for filename in glob(os.path.join(prfl_loc, "*.py")):
+            shutil.copy2(filename, usr_prfl_loc)
+            dst_file = os.path.join(usr_prfl_loc, os.path.basename(filename))
+            os.chown(dst_file, pw_entry.pw_uid, pw_entry.pw_gid)
+        # copy startup files
+        for filename in glob(os.path.join(prfl_loc, "startup", "*.py")):
+            shutil.copy2(filename, usr_prfl_loc)
+            dst_file = os.path.join(usr_prfl_loc, os.path.basename(filename))
+            os.chown(dst_file, pw_entry.pw_uid, pw_entry.pw_gid)
     password = passwd(user["nb-pass"])
+    location = os.path.join(usr_prfl_loc, u"ipython_notebook_config.py")
     with codecs.open(location, "rb", encoding="utf-8") as file_handle:
         content = file_handle.readlines()
     for (i, line) in enumerate(content):
@@ -423,12 +441,20 @@ def setup(config, users):
         execute_command(["groupadd", "-f", config["group"]])
     except subprocess.CalledProcessError as err:
         # actually 'groupadd' command succeeds without su powers
+        LOGGER.warn(err.output.strip())
         LOGGER.warn("Did you run this script with superuser privileges?")
         raise err
     # create users in the list
+    flag = False
     for usr in users:
-        create_user_environment(usr, config)
-        LOGGER.info(u"Created user '%s'.", usr["username"])
+        if create_user_environment(usr, config) > 0:
+            LOGGER.info(u"Failed to setup environment for user '%s'.",
+                    usr["username"])
+            flag = True
+        else:
+            LOGGER.info(u"Setup environment for user '%s'.", usr["username"])
+    if flag:
+        LOGGER.warn(u"Did you run this script with superuser privileges?")
 
 
 ################################################################################
@@ -476,7 +502,7 @@ def launch_user_instance(user, config):
             "--port", user["port"],
             "--certfile", config["certificate"],
             "--profile", config["profile"],
-            "--pylab", "inline",
+#            "--pylab", "inline",
             "--no-browser"]
     cwd = os.path.join(pw_entry.pw_dir, config["launch dir"])
     # should not fail
@@ -520,8 +546,8 @@ def kill_notebooks(user, config):
     try:
         execute_command(["pkill", "-u", user["username"], "-f",
                 "ipython notebook"])
-    except subprocess.CalledProcessError:
-        pass
+    except subprocess.CalledProcessError as err:
+        LOGGER.warn(err.output.strip())
     # verify that indeed all processes have been terminated
     try:
         assert 1 == subprocess.call(["pgrep", "-u", user["username"], "-f",
@@ -578,6 +604,7 @@ def remove(config, users):
     """
     Remove all files and accounts of users listed in the database file.
     """
+    code = 0
     for usr in users:
         try:
             execute_command(["passwd", "-d", usr["username"]])
@@ -585,16 +612,21 @@ def remove(config, users):
             execute_command(["userdel", "-r", usr["username"]])
             usr["nb-pass"] = None
             LOGGER.info(u"Removed user '%s'.", usr["username"])
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as err:
+            code = err.returncode
             LOGGER.debug(u"pssst:", exc_info=True)
-            LOGGER.warn(u"Failed to remove user '%s'.", usr["username"])
-    try:
-        execute_command(["groupdel", config["group"]])
-        LOGGER.info(u"Removed group '%s'.", config["group"])
-    except subprocess.CalledProcessError:
-        LOGGER.debug(u"pssst:", exc_info=True)
-        LOGGER.warn(u"Failed to remove group '%s'.", config["group"])
+            LOGGER.warn(err.output.strip())
+    if code > 0:
         LOGGER.warn(u"Did you run this script with superuser privileges?")
+    choice = raw_input("Do you really want to remove the group '%s'? (y/[n]):"\
+            % config["group"])
+    if choice.lower() == "y":
+        try:
+            execute_command(["groupdel", config["group"]])
+            LOGGER.info(u"Removed group '%s'.", config["group"])
+        except subprocess.CalledProcessError as err:
+            LOGGER.debug(u"pssst:", exc_info=True)
+            LOGGER.warn(err.output.strip())
 
 
 
@@ -642,10 +674,10 @@ if __name__ == "__main__":
         sys.exit(2)
     try:
         rec = main(sys.argv[1:])
-    except StandardError as err:
+    except (StandardError, subprocess.CalledProcessError) as err:
         rec = err.errno if hasattr(err, "errno") else 1
         LOGGER.debug(u"pssst:", exc_info=True)
-        LOGGER.critical(str(err))
+#        LOGGER.critical(str(err))
     finally:
         # perform clean-up
         logging.shutdown()
