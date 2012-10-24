@@ -143,8 +143,10 @@ def parse_config(filename, enc="utf-8"):
         IP is just what we want.
         """
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.connect(("http://www.google.com", 0))
-        return sock.getsockname()[0]
+        sock.connect(("gmail.com", 80))
+        address = sock.getsockname()[0]
+        sock.close()
+        return address
 
     def get_public_ip():
         """
