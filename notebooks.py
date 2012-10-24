@@ -143,7 +143,7 @@ def parse_config(filename, enc="utf-8"):
         IP is just what we want.
         """
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.connect(('google.com', 0))
+        sock.connect(("http://www.google.com", 0))
         return sock.getsockname()[0]
 
     def get_public_ip():
@@ -733,7 +733,7 @@ if __name__ == "__main__":
     except (StandardError, subprocess.CalledProcessError) as err:
         rec = err.errno if hasattr(err, "errno") else 1
         LOGGER.debug(u"pssst:", exc_info=True)
-#        LOGGER.critical(str(err))
+        LOGGER.critical(str(err))
     finally:
         # perform clean-up
         logging.shutdown()
