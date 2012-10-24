@@ -202,6 +202,7 @@ def parse_config(filename, enc="utf-8"):
     # shutdown related options
     data["storage dir"] = config.get("Shutdown", "storage_dir")
     data["owner"] = config.get("Shutdown", "owner")
+    data["system"] = os.uname()[0]
     return data
 
 def tree_copy(src, dst):
@@ -339,13 +340,50 @@ def create_user_environment(user, config):
         pw_entry = pwd.getpwnam(user["username"])
     except KeyError:
         # add a new user
-        try:
-            execute_command(["useradd", "-m", "-G", config["group"],
+        if config["system"] == "Linux":
+            try:
+                execute_command(["useradd", "-m", "-G", config["group"],
+                        user["username"]])
+            except subprocess.CalledProcessError as err:
+                LOGGER.debug(u"pssst:", exc_info=True)
+                LOGGER.warn(err.output.strip())
+                return err.returncode
+        elif config["system"] == "Darwin":
+            try:
+                # create new user entry
+                execute_command(["dscl", ".", "-create",
+                    "/Users/%s" % user["username"]])
+                # set shell
+                execute_command(["dscl", ".", "-create",
+                    "/Users/%s" % user["username"], "UserShell", "/bin/bash"])
+                # set full name
+                execute_command(["dscl", ".", "-create",
+                    "/Users/%s" % user["username"], "RealName",
+                    "%s %s" % (user["name"], user["surname"])])
+                # find existing user IDs (limited to 256)
+                output = execute_command(["dscl", ".", "-list", "/Users", "uid"])
+                uids = [int(line.split()) for line in output.split("\n")]
+                new_uid = max(uids) + 1
+                # set new unique user ID
+                execute_command(["dscl", ".", "-create",
+                    "/Users/%s" % user["username"], "UniqueID", str(new_uid)])
+                # set user's group ID property TODO: must be unique?
+                execute_command(["dscl", ".", "-create",
+                    "/Users/%s" % user["username"], "PrimaryGroupID", "80"])
+                # create and set home directory
+                execute_command(["dscl", ".", "-create",
+                    "/Users/%s" % user["username"], "NFSHomeDirectory",
+                    "/Local/Users/%s" % user["username"]])
+                # add user to secondary group
+                execute_command(["dscl", ".", "-append",
+                    "/Groups/%s" % config["group"], "GroupMembership",
                     user["username"]])
-        except subprocess.CalledProcessError as err:
-            LOGGER.debug(u"pssst:", exc_info=True)
-            LOGGER.warn(err.output.strip())
-            return err.returncode
+            except subprocess.CalledProcessError as err:
+                LOGGER.debug(u"pssst:", exc_info=True)
+                LOGGER.warn(err.output.strip())
+                return err.returncode
+        else:
+            raise StandardError("unkown OS")
         # set the (weak) password using numbers, letters, and the exclamation
         # mark
         if not user["sys-pass"]:
@@ -374,9 +412,16 @@ def create_user_environment(user, config):
         user["nb-pass"] = u"".join(random.choice(config["passwd selection"])\
                 for x in range(config["passwd length"]))
     if not user["username"] in grp_entry.gr_mem:
+        if config["system"] == "Linux":
+            cmd = ["usermod", "-aG", config["group"], user["username"]]
+        elif config["system"] == "Darwin":
+            cmd = ["dscl", ".", "-append", "/Groups/%s" % config["group"],
+                    "GroupMembership", user["username"]]
+        else:
+            raise StandardError("unkown OS")
         try:
-            execute_command(["usermod", "-aG", config["group"],
-                    user["username"]])
+            # add user to secondary group
+            execute_command(cmd)
         except subprocess.CalledProcessError as err:
             LOGGER.debug(u"pssst:", exc_info=True)
             LOGGER.warn(err.output.strip())
@@ -437,24 +482,35 @@ def setup(config, users):
     creates each student as a system user, writes out information.
     """
     # should add the group if it doesn't exist already
-    try:
-        execute_command(["groupadd", "-f", config["group"]])
-    except subprocess.CalledProcessError as err:
-        # actually 'groupadd' command succeeds without su powers
-        LOGGER.warn(err.output.strip())
-        LOGGER.warn("Did you run this script with superuser privileges?")
-        raise err
+    if config["system"] == "Linux":
+        try:
+            execute_command(["groupadd", "-f", config["group"]])
+        except subprocess.CalledProcessError as err:
+            LOGGER.warn(err.output.strip())
+            raise err
+    elif config["system"] == "Darwin":
+        try:
+            execute_command(["dscl", ".", "-create",
+                    "/Groups/%s" % config["group"]])
+            output = execute_command(["dscl", ".", "-list", "/Groups", "gid"])
+            gids = [int(line.split()) for line in output.split("\n")]
+            new_gid = max(gids) + 1
+            execute_command(["dscl", ".", "-append",
+                "/Groups/%s" % config["group"], "gid", str(new_gid)])
+            execute_command(["dscl", ".", "-append",
+                "/Groups/%s" % config["group"], "passwd", "*"])
+        except subprocess.CalledProcessError as err:
+            LOGGER.warn(err.output.strip())
+            raise err
+    else:
+        raise StandardError("unkown OS")
     # create users in the list
-    flag = False
     for usr in users:
         if create_user_environment(usr, config) > 0:
-            LOGGER.info(u"Failed to setup environment for user '%s'.",
+            LOGGER.warn(u"Failed to setup environment for user '%s'.",
                     usr["username"])
-            flag = True
         else:
             LOGGER.info(u"Setup environment for user '%s'.", usr["username"])
-    if flag:
-        LOGGER.warn(u"Did you run this script with superuser privileges?")
 
 
 ################################################################################
@@ -604,7 +660,6 @@ def remove(config, users):
     """
     Remove all files and accounts of users listed in the database file.
     """
-    code = 0
     for usr in users:
         try:
             execute_command(["passwd", "-d", usr["username"]])
@@ -613,11 +668,8 @@ def remove(config, users):
             usr["nb-pass"] = None
             LOGGER.info(u"Removed user '%s'.", usr["username"])
         except subprocess.CalledProcessError as err:
-            code = err.returncode
             LOGGER.debug(u"pssst:", exc_info=True)
             LOGGER.warn(err.output.strip())
-    if code > 0:
-        LOGGER.warn(u"Did you run this script with superuser privileges?")
     choice = raw_input("Do you really want to remove the group '%s'? (y/[n]):"\
             % config["group"])
     if choice.lower() == "y":
@@ -637,6 +689,10 @@ def remove(config, users):
 
 def main(argv):
     # basic sanity checks
+    # check for privileges
+    if os.geteuid() != 0:
+        raise StandardError("You need to have superuser privileges to run this script.")
+    # existance of config file
     if len(argv) == 2:
         config_file = argv[1]
     else:
