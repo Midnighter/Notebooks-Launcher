@@ -85,16 +85,15 @@ def append_to_group(groupname, username):
         rc = err.returncode
     return rc
 
-def kill_process(username, process="ipython notebook"):
+def kill_process(username, process):
     # must not fail, i.e., user must exist on the system
     try:
         execute_command(["pkill", "-u", username, "-f", process])
     except subprocess.CalledProcessError as err:
         LOGGER.warn(err.output.strip())
+    time.sleep(0.1)
     # verify that indeed all processes have been terminated
-    try:
-        assert 1 == subprocess.call(["pgrep", "-u", username, "-f", process])
-    except AssertionError:
+    if 0 == subprocess.call(["pgrep", "-u", username, "-f", process]):
         LOGGER.warn(u"User '{0}' still has running notebook kernel(s).".format(
                 username))
 
@@ -102,7 +101,7 @@ def delete_user(usr):
     rc = 0
     try:
         # remove the user from all secondary groups
-        execute_command(["usermod", "-G", usr["username"]])
+        execute_command(["usermod", "-G", usr["username"], usr["username"]])
         # delete the passwd entry
         execute_command(["passwd", "-d", usr["username"]])
         usr["sys-pass"] = ""

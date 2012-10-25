@@ -22,6 +22,8 @@ __all__ = ["add_user", "add_group", "add_password", "append_to_group",
 
 import logging
 import subprocess
+import random
+import time
 
 
 LOGGER = logging.getLogger()
@@ -38,15 +40,25 @@ def add_user(username, *args):
         # set full name
 #        execute_command(["dscl", ".", "-create", "/Users/%s" % user["username"],
 #                "RealName", "%s %s" % (user["name"], user["surname"])])
-        # find a unique uid
-        # find existing user IDs (limited to 256)
-        output = execute_command(["dscl", ".", "-list", "/Users", "uid"])
-        uids = [int(line.split()[1]) for line in output.split("\n") if line]
-        new_uid = max(uids) + 1
+        # find a unique uid still a limited and potentially slow approach
+        new_uid = random.randint(501, 3000)
+        try:
+            execute_command(["id", str(new_uid)])
+            exists = True
+        except subprocess.CalledProcessError:
+            exists = False
+        while exists:
+            new_uid = random.randint(501, 3000)
+            try:
+                execute_command(["id", str(new_uid)])
+                exists = True
+            except subprocess.CalledProcessError:
+                exists = False
         # set new unique user ID
         execute_command(["dscl", ".", "-create", user, "UniqueID", str(new_uid)])
-        # set user's group ID property TODO: must be unique?
-        execute_command(["dscl", ".", "-create", user, "PrimaryGroupID", "80"])
+        # set user's group ID property
+        execute_command(["dscl", ".", "-create", user, "PrimaryGroupID",
+                str(new_uid)])
         # set home directory
         execute_command(["dscl", ".", "-create", user, "NFSHomeDirectory",
             "/Local{0}".format(user)])
@@ -68,10 +80,20 @@ def add_group(groupname):
     try:
         # create the new group
         execute_command(["dscl", ".", "-create", group])
-        # find a unique gid
-        output = execute_command(["dscl", ".", "-list", "/Groups", "gid"])
-        gids = [int(line.split()[1]) for line in output.split("\n") if line]
-        new_gid = max(gids) + 1
+        # find a unique gid; still a limited and potentially slow approach
+        new_gid = random.randint(501, 3000)
+        try:
+            execute_command(["id", str(new_gid)])
+            exists = True
+        except subprocess.CalledProcessError:
+            exists = False
+        while exists:
+            new_gid = random.randint(501, 3000)
+            try:
+                execute_command(["id", str(new_gid)])
+                exists = True
+            except subprocess.CalledProcessError:
+                exists = False
         # set new unique gid
         execute_command(["dscl", ".", "-append", group, "gid", str(new_gid)])
         # is setting a password necessary?
@@ -104,16 +126,38 @@ def append_to_group(groupname, username):
         rc = err.returncode
     return rc
 
-def kill_process(username, process):
-    # must not fail, i.e., user must exist on the system
+def pgrep(username, process):
+    pids = list()
     try:
-        execute_command(["pkill", "-u", username, "-f", process])
+        plist = execute_command(["ps", "-u", username, "-xo", "pid,command,args"])
     except subprocess.CalledProcessError as err:
         LOGGER.warn(err.output.strip())
+        return pids
+    for line in plist.split("\n"):
+        if process in line:
+            pids.append(int(line.split()[0]))
+    return pids
+
+def kill_process(username, process):
+    # must not fail, i.e., user must exist on the system
+    for pid in pgrep(username, process):
+        try:
+            execute_command(["kill", str(pid)])
+        except subprocess.CalledProcessError as err:
+            LOGGER.warn(err.output.strip())
+    time.sleep(0.1)
+    # force quit remaining matches
+#    nasties = pgrep(username, process)
+#    if not nasties:
+#        return
+#    for pid in nasties:
+#        try:
+#            execute_command(["kill", "-9", str(pid)])
+#        except subprocess.CalledProcessError as err:
+#            LOGGER.warn(err.output.strip())
+#    time.sleep(0.1)
     # verify that indeed all processes have been terminated
-    try:
-        assert 1 == subprocess.call(["pgrep", "-u", username, "-f", process])
-    except AssertionError:
+    if pgrep(username, process):
         LOGGER.warn(u"User '{0}' still has running notebook kernel(s).".format(
                 username))
 
