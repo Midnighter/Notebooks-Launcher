@@ -18,6 +18,9 @@ Configure IPython Notebook Environment
 """
 
 
+__all__ = ["execute_command", "launch_as"]
+
+
 import logging
 import sys
 import os
@@ -30,12 +33,19 @@ import string
 import random
 import csv
 import ConfigParser
-import time
 import codecs
 import socket
-import pexpect
 
 from glob import glob
+
+if os.uname()[0] == "Linux":
+    from linux_utils import add_user, add_group, add_password, append_to_group,\
+            kill_process, delete_user, delete_group
+elif os.uname()[0] == "Darwin":
+    from mac_utils import add_user, add_group, add_password, append_to_group,\
+            kill_process, delete_user, delete_group
+else:
+    raise StandardError("unkown operating system")
 
 # non-standard but must for ipython notebook
 import tornado.ioloop
@@ -52,9 +62,6 @@ from IPython.lib import passwd
 
 
 LOGGER = logging.getLogger()
-LOGGER.setLevel(logging.INFO)
-#LOGGER.setLevel(logging.DEBUG)
-LOGGER.addHandler(logging.StreamHandler())
 
 
 # expected header for the user database file
@@ -77,16 +84,18 @@ def read_database(filename, enc="utf-8"):
     The `csv` reader may have issues with UTF-16 encoded files.
     """
     global FIELDNAMES
-    sniffer = csv.Sniffer()
+#    sniffer = csv.Sniffer()
     with codecs.open(filename, "rb", encoding=enc) as file_handle:
-        local_dialect = sniffer.sniff(file_handle.readline(), delimiters=u",;:\t")
-        file_handle.seek(0)
+#        local_dialect = sniffer.sniff(file_handle.readline(), delimiters=u",;:\t")
+        local_dialect = csv.excel
+#        file_handle.seek(0)
         reader = csv.DictReader(file_handle, dialect=local_dialect)
         if set(FIELDNAMES).issubset(set(reader.fieldnames)):
             FIELDNAMES = reader.fieldnames
         else:
             raise ValueError(u"database file lacks required field names:\n"\
-                    u"\theader format should be '%s'" % u",".join(FIELDNAMES))
+                    u"\theader format should be '{0}'"\
+                    .format(",".join(FIELDNAMES)))
         users = [row for row in reader]
     return (users, local_dialect)
 
@@ -143,9 +152,14 @@ def parse_config(filename, enc="utf-8"):
         IP is just what we want.
         """
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.connect(("gmail.com", 80))
-        address = sock.getsockname()[0]
-        sock.close()
+        try:
+            sock.connect(("gmail.com", 80))
+            address = sock.getsockname()[0]
+        except (socket.error, socket.gaierror, socket.timeout):
+            LOGGER.debug(u"pssst:", exc_info=True)
+            address = "127.0.0.1"
+        finally:
+            sock.close()
         return address
 
     def get_public_ip():
@@ -155,8 +169,8 @@ def parse_config(filename, enc="utf-8"):
         """
         import urllib2
         import re
-        data = str(urllib2.urlopen("http://checkip.dyndns.com/").read())
-        return re.search(r"Address: (\d+\.\d+\.\d+\.\d+)", data).group(1)
+        data = str(urllib2.urlopen("http://whatismyip.org").read())
+        return re.search(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", data).group(1)
 
     config = ConfigParser.SafeConfigParser()
     with codecs.open(filename, encoding=enc) as file_handle:
@@ -165,12 +179,13 @@ def parse_config(filename, enc="utf-8"):
     # setup related options
     data["user list"] = config.get("Setup", "user_list")
     if not os.path.exists(data["user list"]):
-        raise IOError(errno.ENOENT, u"no such file '%s'" % data["user list"])
+        raise IOError(errno.ENOENT, u"no such file '{0}'"\
+                .format(data["user list"]))
     data["tutorial dir"] = config.get("Setup", "tutorial_dir")
     data["material dir"] = config.get("Setup", "material_dir")
     if not os.path.exists(data["material dir"]):
         raise IOError(errno.ENOENT,
-                u"no such directory '%s'" % data["material dir"])
+                u"no such directory '{0}'".format(data["material dir"]))
     data["passwd length"] = config.getint("Setup", "password_length")
     data["group"] = config.get("Setup", "group")
     data["passwd selection"] = string.printable[:62]
@@ -178,11 +193,11 @@ def parse_config(filename, enc="utf-8"):
     # launch related options
     data["certificate"] = config.get("Launch", "cert_file")
     if not os.path.isabs(data["certificate"]):
-        raise ValueError(u"path to certificate file '%s' is not absolute" %
-                data["certificate"])
+        raise ValueError(u"path to certificate file '{0}' is not absolute"\
+                .format(data["certificate"]))
     if not os.path.exists(data["certificate"]):
-        raise IOError(errno.ENOENT,
-                u"no such directory '%s'" % data["certificate"])
+        raise IOError(errno.ENOENT, u"no such directory '{0}'"\
+                .format(data["certificate"]))
     data["launch dir"] = config.get("Launch", "launch_dir")
     # if launch_dir was not given we simply use tutorial_dir/final_part_of_material_dir
     if not data["launch dir"]:
@@ -204,7 +219,6 @@ def parse_config(filename, enc="utf-8"):
     # shutdown related options
     data["storage dir"] = config.get("Shutdown", "storage_dir")
     data["owner"] = config.get("Shutdown", "owner")
-    data["system"] = os.uname()[0]
     return data
 
 def tree_copy(src, dst):
@@ -342,70 +356,17 @@ def create_user_environment(user, config):
         pw_entry = pwd.getpwnam(user["username"])
     except KeyError:
         # add a new user
-        if config["system"] == "Linux":
-            try:
-                execute_command(["useradd", "-m", "-G", config["group"],
-                        user["username"]])
-            except subprocess.CalledProcessError as err:
-                LOGGER.debug(u"pssst:", exc_info=True)
-                LOGGER.warn(err.output.strip())
-                return err.returncode
-        elif config["system"] == "Darwin":
-            try:
-                # create new user entry
-                execute_command(["dscl", ".", "-create",
-                    "/Users/%s" % user["username"]])
-                # set shell
-                execute_command(["dscl", ".", "-create",
-                    "/Users/%s" % user["username"], "UserShell", "/bin/bash"])
-                # set full name
-                execute_command(["dscl", ".", "-create",
-                    "/Users/%s" % user["username"], "RealName",
-                    "%s %s" % (user["name"], user["surname"])])
-                # find existing user IDs (limited to 256)
-                output = execute_command(["dscl", ".", "-list", "/Users", "uid"])
-                uids = [int(line.split()) for line in output.split("\n")]
-                new_uid = max(uids) + 1
-                # set new unique user ID
-                execute_command(["dscl", ".", "-create",
-                    "/Users/%s" % user["username"], "UniqueID", str(new_uid)])
-                # set user's group ID property TODO: must be unique?
-                execute_command(["dscl", ".", "-create",
-                    "/Users/%s" % user["username"], "PrimaryGroupID", "80"])
-                # create and set home directory
-                execute_command(["dscl", ".", "-create",
-                    "/Users/%s" % user["username"], "NFSHomeDirectory",
-                    "/Local/Users/%s" % user["username"]])
-                # add user to secondary group
-                execute_command(["dscl", ".", "-append",
-                    "/Groups/%s" % config["group"], "GroupMembership",
-                    user["username"]])
-            except subprocess.CalledProcessError as err:
-                LOGGER.debug(u"pssst:", exc_info=True)
-                LOGGER.warn(err.output.strip())
-                return err.returncode
-        else:
-            raise StandardError("unkown OS")
+        rc = add_user(user["username"], config["group"])
+        if rc != 0:
+            return rc
         # set the (weak) password using numbers, letters, and the exclamation
         # mark
         if not user["sys-pass"]:
             user["sys-pass"] = u"".join(random.choice(config["passwd selection"])\
                     for x in range(config["passwd length"]))
-# the --stdin parameter to passwd is not stable, and if the user already exists
-# this fails anyway, so the pexpect version is better
-#        ps = subprocess.Popen(["passwd", "--stdin", user["username"]],
-#                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-#                stderr=subprocess.PIPE)
-#        (stdout, stderr) = ps.communicate(user["password"])
-#        if stderr:
-#            raise OSError(ps.returncode, stderr)
-#        elif ps.returncode != 0:
-#            raise OSError(ps.returncode, stdout)
-        password = pexpect.spawn(u"passwd %s" % user["username"])
-        for repeat in (1, 2):
-            password.expect(u"password: ")
-            password.sendline(user["sys-pass"])
-            time.sleep(0.1)
+            rc = add_password(user["username"], user["sys-pass"])
+            if rc != 0:
+                return rc
     # should not fail now
     pw_entry = pwd.getpwnam(user["username"])
     # potentially add the user to the desired (supplementary) group
@@ -414,34 +375,23 @@ def create_user_environment(user, config):
         user["nb-pass"] = u"".join(random.choice(config["passwd selection"])\
                 for x in range(config["passwd length"]))
     if not user["username"] in grp_entry.gr_mem:
-        if config["system"] == "Linux":
-            cmd = ["usermod", "-aG", config["group"], user["username"]]
-        elif config["system"] == "Darwin":
-            cmd = ["dscl", ".", "-append", "/Groups/%s" % config["group"],
-                    "GroupMembership", user["username"]]
-        else:
-            raise StandardError("unkown OS")
-        try:
-            # add user to secondary group
-            execute_command(cmd)
-        except subprocess.CalledProcessError as err:
-            LOGGER.debug(u"pssst:", exc_info=True)
-            LOGGER.warn(err.output.strip())
-            return err.returncode
+        append_to_group(config["group"], user["username"])
     # create the ipython config
     cmd = ["ipython", "profile", "create", config["profile"]]
     try:
         launch_as(pw_entry, cmd, pw_entry.pw_dir)
-    except OSError as err:
-        return 1
+    except subprocess.CalledProcessError as err:
+        LOGGER.debug(u"pssst:", exc_info=True)
+        LOGGER.warn(err.output.strip())
+        return err.returncode
     # location of the ipython directory created with the profile
     # get_ipython_dir currently returns different results for other users :S
     cmd = ["python", "ipython_dir.py"]
     user_ipython_dir = launch_as(pw_entry, cmd, os.getcwd()).strip()
     # if the specified profile exists we copy the contents
-    prfl_loc = os.path.join(get_ipython_dir(), u"profile_%s" % config["profile"])
-    usr_prfl_loc = os.path.join(user_ipython_dir,
-            u"profile_%s" % config["profile"])
+    profile = "profile_{0}".format(config["profile"])
+    prfl_loc = os.path.join(get_ipython_dir(), profile)
+    usr_prfl_loc = os.path.join(user_ipython_dir, profile)
     if os.path.exists(prfl_loc):
         # copy profile files
         for filename in glob(os.path.join(prfl_loc, "*.py")):
@@ -460,7 +410,7 @@ def create_user_environment(user, config):
     for (i, line) in enumerate(content):
         if line.find(u"c.NotebookApp.password") > -1:
             break
-    content[i] = u"c.NotebookApp.password = u'%s'" % password
+    content[i] = u"c.NotebookApp.password = u'{0}'".format(password)
     with codecs.open(location, "wb", encoding="utf-8") as file_handle:
         file_handle.writelines(content)
     # copy content of material dir into user directory
@@ -474,7 +424,7 @@ def create_user_environment(user, config):
                 os.path.join(destination_path, material))
     except shutil.Error:
         raise OSError(errno.ENOENT,
-                u"copying files for user '%s' failed" % user["username"])
+                u"copying files for user '{0}' failed".format(user["username"]))
     # change the owner of the files in the user directory
     tree_chown(pw_entry, destination_path)
 
@@ -484,35 +434,17 @@ def setup(config, users):
     creates each student as a system user, writes out information.
     """
     # should add the group if it doesn't exist already
-    if config["system"] == "Linux":
-        try:
-            execute_command(["groupadd", "-f", config["group"]])
-        except subprocess.CalledProcessError as err:
-            LOGGER.warn(err.output.strip())
-            raise err
-    elif config["system"] == "Darwin":
-        try:
-            execute_command(["dscl", ".", "-create",
-                    "/Groups/%s" % config["group"]])
-            output = execute_command(["dscl", ".", "-list", "/Groups", "gid"])
-            gids = [int(line.split()) for line in output.split("\n")]
-            new_gid = max(gids) + 1
-            execute_command(["dscl", ".", "-append",
-                "/Groups/%s" % config["group"], "gid", str(new_gid)])
-            execute_command(["dscl", ".", "-append",
-                "/Groups/%s" % config["group"], "passwd", "*"])
-        except subprocess.CalledProcessError as err:
-            LOGGER.warn(err.output.strip())
-            raise err
-    else:
-        raise StandardError("unkown OS")
+    rc = add_group(config["group"])
+    if rc != 0:
+        raise OSError("failed to add new group '{0}'".format(config["group"]))
     # create users in the list
     for usr in users:
         if create_user_environment(usr, config) > 0:
-            LOGGER.warn(u"Failed to setup environment for user '%s'.",
-                    usr["username"])
+            LOGGER.warn(u"Failed to setup environment for user '{0}'.".format(
+                    usr["username"]))
         else:
-            LOGGER.info(u"Setup environment for user '%s'.", usr["username"])
+            LOGGER.info(u"Setup environment for user '{0}'."\
+                    .format(usr["username"]))
 
 
 ################################################################################
@@ -580,10 +512,11 @@ def launch(config, users):
     for (i, usr) in enumerate(users):
         usr["port"] = str(config["port"] + 1 + i)
         launch_user_instance(usr, config)
-        LOGGER.info(u"Started notebook kernel(s) for user '%s'.", usr["username"])
+        LOGGER.info(u"Started notebook kernel(s) for user '{0}'."\
+                .format(usr["username"]))
     # generate webserver with content
-    LOGGER.warn("\nSpawning webserver at %s:%d\n", config["server"],
-            config["port"])
+    LOGGER.warn("\nSpawning webserver at {0}:{1}\n".format(config["server"],
+            config["port"]))
     application = tornado.web.Application([(r"/", MainHandler,
             dict(title=config["title"], server=config["server"],
             users=users)),])
@@ -601,26 +534,14 @@ def kill_notebooks(user, config):
     Finds IPython Notebook instances running for the user and kills them.
     """
     # must not fail, i.e., user must exist on the system
-    try:
-        execute_command(["pkill", "-u", user["username"], "-f",
-                "ipython notebook"])
-    except subprocess.CalledProcessError as err:
-        LOGGER.warn(err.output.strip())
-    # verify that indeed all processes have been terminated
-    try:
-        assert 1 == subprocess.call(["pgrep", "-u", user["username"], "-f",
-                "ipython notebook"])
-    except AssertionError:
-        LOGGER.warn(u"User '%s' still has running notebook kernel(s).",
-                user["username"])
-        LOGGER.warn(u"Did you run this script with superuser privileges?")
+    rc = kill_process(user["username"], "ipython notebook")
     # retrieve user generated material
     try:
         pw_entry = pwd.getpwnam(user["username"])
     except KeyError:
         LOGGER.debug(u"pssst:", exc_info=True)
-        LOGGER.warn(u"Failed to get passwd entry for '%s'.",
-                user["username"])
+        LOGGER.warn(u"Failed to get passwd entry for '{0}'."\
+                .format(user["username"]))
         return
     source_path = os.path.normpath(os.path.join(pw_entry.pw_dir,
             config["tutorial dir"]))
@@ -632,7 +553,8 @@ def kill_notebooks(user, config):
         tree_copy(source_path, dest_path)
     except shutil.Error:
         LOGGER.debug(u"pssst:", exc_info=True)
-        LOGGER.warn(u"Retrieving files for user '%s' failed.", user["username"])
+        LOGGER.warn(u"Retrieving files for user '{0}' failed."\
+                .format(user["username"]))
     user["port"] = u""
 
 def shutdown(config, users):
@@ -641,14 +563,14 @@ def shutdown(config, users):
     """
     for usr in users:
         kill_notebooks(usr, config)
-        LOGGER.info(u"Shutdown notebook kernel(s) for user '%s'.", usr["username"])
+        LOGGER.info(u"Shutdown notebook kernel(s) for user '{0}'."\
+                .format(usr["username"]))
     # change the owner of the files in the storage directory
     try:
         owner_entry = pwd.getpwnam(config["owner"])
     except KeyError:
-        LOGGER.debug(u"pssst:", exc_info=True)
-        LOGGER.warn(u"Failed to get passwd entry for owner '%s',"\
-                u" did you set it in the config file?", config["owner"])
+        LOGGER.warn(u"Failed to get passwd entry for owner '{0}',"\
+                u" did you set it in the config file?".format(config["owner"]))
         return
     tree_chown(owner_entry, config["storage dir"])
 
@@ -663,25 +585,11 @@ def remove(config, users):
     Remove all files and accounts of users listed in the database file.
     """
     for usr in users:
-        try:
-            execute_command(["passwd", "-d", usr["username"]])
-            usr["sys-pass"] = None
-            execute_command(["userdel", "-r", usr["username"]])
-            usr["nb-pass"] = None
-            LOGGER.info(u"Removed user '%s'.", usr["username"])
-        except subprocess.CalledProcessError as err:
-            LOGGER.debug(u"pssst:", exc_info=True)
-            LOGGER.warn(err.output.strip())
-    choice = raw_input("Do you really want to remove the group '%s'? (y/[n]):"\
-            % config["group"])
+        delete_user(usr)
+    choice = raw_input("Do you really want to remove the group '{0}'? (y/[n]):"\
+            .format(config["group"]))
     if choice.lower() == "y":
-        try:
-            execute_command(["groupdel", config["group"]])
-            LOGGER.info(u"Removed group '%s'.", config["group"])
-        except subprocess.CalledProcessError as err:
-            LOGGER.debug(u"pssst:", exc_info=True)
-            LOGGER.warn(err.output.strip())
-
+        delete_group(config["group"])
 
 
 ################################################################################
@@ -690,6 +598,9 @@ def remove(config, users):
 
 
 def main(argv):
+    LOGGER.setLevel(logging.INFO)
+    LOGGER.setLevel(logging.DEBUG)
+    LOGGER.addHandler(logging.StreamHandler())
     # basic sanity checks
     # check for privileges
     if os.geteuid() != 0:
@@ -700,7 +611,7 @@ def main(argv):
     else:
         config_file = u"notebooks.cfg"
     if not os.path.exists(config_file):
-        raise IOError(errno.ENOENT, u"no such file '%s'" % config_file)
+        raise IOError(errno.ENOENT, u"no such file '{0}'".format(config_file))
     # parse configuration
     config = parse_config(config_file)
     # get the list of notebook users
@@ -716,8 +627,9 @@ def main(argv):
         elif argv[0].lower() == "remove":
             remove(config, users)
         else:
-            raise ValueError(u"unrecognised option: '%s'" % argv[0])
+            raise ValueError(u"unrecognised option: '{0}'".format(argv[0]))
     except BaseException as err:
+        LOGGER.debug(u"pssst:", exc_info=True)
         raise err
     finally:
         # write user information
@@ -727,14 +639,13 @@ def main(argv):
 if __name__ == "__main__":
     argc = len(sys.argv)
     if argc < 2 or argc > 3:
-        LOGGER.critical(u"Usage:\nsudo python %s <setup | launch | shutdown | remove>"\
-                u" [config file: path]" % sys.argv[0])
+        LOGGER.critical(u"Usage:\nsudo python {0} <setup | launch | shutdown | remove>"\
+                u" [config file: path]".format(sys.argv[0]))
         sys.exit(2)
     try:
         rec = main(sys.argv[1:])
-    except (StandardError, subprocess.CalledProcessError) as err:
+    except (Exception) as err:
         rec = err.errno if hasattr(err, "errno") else 1
-        LOGGER.debug(u"pssst:", exc_info=True)
         LOGGER.critical(str(err))
     finally:
         # perform clean-up
