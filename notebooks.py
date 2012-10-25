@@ -39,11 +39,9 @@ import socket
 from glob import glob
 
 if os.uname()[0] == "Linux":
-    from linux_utils import add_user, add_group, add_password, append_to_group,\
-            kill_process, delete_user, delete_group
+    from linux_utils import *
 elif os.uname()[0] == "Darwin":
-    from mac_utils import add_user, add_group, add_password, append_to_group,\
-            kill_process, delete_user, delete_group
+    from mac_utils import *
 else:
     raise StandardError("unkown operating system")
 
@@ -599,7 +597,7 @@ def remove(config, users):
 
 def main(argv):
     LOGGER.setLevel(logging.INFO)
-    LOGGER.setLevel(logging.DEBUG)
+#    LOGGER.setLevel(logging.DEBUG)
     LOGGER.addHandler(logging.StreamHandler())
     # basic sanity checks
     # check for privileges

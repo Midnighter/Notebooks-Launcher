@@ -101,8 +101,12 @@ def kill_process(username, process="ipython notebook"):
 def delete_user(usr):
     rc = 0
     try:
+        # remove the user from all secondary groups
+        execute_command(["usermod", "-G", usr["username"]])
+        # delete the passwd entry
         execute_command(["passwd", "-d", usr["username"]])
         usr["sys-pass"] = ""
+        # delete the user account
         execute_command(["userdel", "-r", usr["username"]])
         usr["nb-pass"] = ""
         LOGGER.info(u"Removed user '%s'.", usr["username"])

@@ -38,6 +38,7 @@ def add_user(username, *args):
         # set full name
 #        execute_command(["dscl", ".", "-create", "/Users/%s" % user["username"],
 #                "RealName", "%s %s" % (user["name"], user["surname"])])
+        # find a unique uid
         # find existing user IDs (limited to 256)
         output = execute_command(["dscl", ".", "-list", "/Users", "uid"])
         uids = [int(line.split()[1]) for line in output.split("\n") if line]
@@ -46,9 +47,11 @@ def add_user(username, *args):
         execute_command(["dscl", ".", "-create", user, "UniqueID", str(new_uid)])
         # set user's group ID property TODO: must be unique?
         execute_command(["dscl", ".", "-create", user, "PrimaryGroupID", "80"])
-        # create and set home directory
+        # set home directory
         execute_command(["dscl", ".", "-create", user, "NFSHomeDirectory",
             "/Local{0}".format(user)])
+        # still need to create $HOME?
+        execute_command(["createhomedir", "-c"])
         # add user to secondary group(s)
         for group in args:
             execute_command(["dscl", ".", "-append", "/Groups/{0}".format(group),
@@ -63,12 +66,16 @@ def add_group(groupname):
     rc = 0
     group = "/Groups/{0}".format(groupname)
     try:
+        # create the new group
         execute_command(["dscl", ".", "-create", group])
+        # find a unique gid
         output = execute_command(["dscl", ".", "-list", "/Groups", "gid"])
         gids = [int(line.split()[1]) for line in output.split("\n") if line]
         new_gid = max(gids) + 1
+        # set new unique gid
         execute_command(["dscl", ".", "-append", group, "gid", str(new_gid)])
-        execute_command(["dscl", ".", "-append", group, "passwd", "*"])
+        # is setting a password necessary?
+#        execute_command(["dscl", ".", "-append", group, "passwd", "*"])
     except subprocess.CalledProcessError as err:
         LOGGER.debug(u"pssst:", exc_info=True)
         LOGGER.warn(err.output.strip())
@@ -113,8 +120,18 @@ def kill_process(username, process):
 def delete_user(usr):
     rc = 0
     try:
+        # remove user from all secondary groups
+        groups = execute_command(["id", "-nG", usr["username"]])
+        for grp in groups.split():
+            execute_command(["dscl", ".", "-delete",
+                    "/Groups/{0}".format(grp), "GroupMembership", usr["username"]])
+        # delete the passwd entry
+        execute_command(["dscl", ".", "-delete",
+                "/Users/{0}".format(usr["username"]), "Password"])
+        # delete the primary group
         execute_command(["dscl", ".", "-delete",
                 "/Groups/{0}".format(usr["username"])])
+        # delete the user
         execute_command(["dscl", ".", "-delete",
                 "/Users/{0}".format(usr["username"])])
         usr["sys-pass"] = ""
