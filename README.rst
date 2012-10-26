@@ -13,6 +13,7 @@ Compatibility
 -------------
 
 *Should* work for:
+
 * most Linux flavours
 * Mac OS
 

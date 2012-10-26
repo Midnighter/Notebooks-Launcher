@@ -316,7 +316,9 @@ def launch_as(pw_entry, args, cwd, stdin=None):
             preexec_fn=assume_user(pw_entry.pw_uid, pw_entry.pw_gid))
     (stdout, stderr) = prcs.communicate(stdin)
     if prcs.returncode != 0:
-        raise subprocess.CalledProcessError(prcs.returncode, args, stderr)
+        err = subprocess.CalledProcessError(prcs.returncode, args)
+        err.output = stderr
+        raise err
     return stdout if stdout else stderr
 
 def execute_command(args, stdin=None, cwd=None, env=None):
@@ -339,7 +341,9 @@ def execute_command(args, stdin=None, cwd=None, env=None):
             stderr=subprocess.PIPE)
     (stdout, stderr) = prcs.communicate(stdin)
     if prcs.returncode != 0:
-        raise subprocess.CalledProcessError(prcs.returncode, args, stderr)
+        err = subprocess.CalledProcessError(prcs.returncode, args)
+        err.output = stderr
+        raise err
     return stdout if stdout else stderr
 
 
