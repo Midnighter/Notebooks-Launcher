@@ -22,8 +22,8 @@ __all__ = ["add_user", "add_group", "add_password", "append_to_group",
 
 import logging
 import subprocess
-import random
-import time
+import grp
+import pwd
 
 
 LOGGER = logging.getLogger()
@@ -41,14 +41,13 @@ def add_user(username, *args):
 #        execute_command(["dscl", ".", "-create", "/Users/%s" % user["username"],
 #                "RealName", "%s %s" % (user["name"], user["surname"])])
         # find a unique uid still a limited and potentially slow approach
-        new_uid = random.randint(501, 3000)
-        while subprocess.call(["id", str(new_uid)]) == 0:
-            new_uid = random.randint(501, 3000)
+        new_uid = max(pw_entry.pw_uid for pw_entry in pwd.getpwall()) + 1
         # set new unique user ID
         execute_command(["dscl", ".", "-create", user, "UniqueID", str(new_uid)])
-        # set user's group ID property
+        # set user's primary group ID property to be 'staff'
+        staff = grp.getgrnam("staff")
         execute_command(["dscl", ".", "-create", user, "PrimaryGroupID",
-                str(new_uid)])
+                str(staff.gr_gid)])
         # set home directory
         execute_command(["dscl", ".", "-create", user, "NFSHomeDirectory",
             "/Local{0}".format(user)])
@@ -71,9 +70,7 @@ def add_group(groupname):
         # create the new group
         execute_command(["dscl", ".", "-create", group])
         # find a unique gid; still a limited and potentially slow approach
-        new_gid = random.randint(501, 3000)
-        while subprocess.call(["id", str(new_gid)]) == 0:
-            new_gid = random.randint(501, 3000)
+        new_gid = max(gr_entry.gr_gid for gr_entry in grp.getgrall()) + 1
         # set new unique gid
         execute_command(["dscl", ".", "-append", group, "gid", str(new_gid)])
         # is setting a password necessary?
@@ -125,7 +122,6 @@ def kill_process(username, process):
             execute_command(["kill", str(pid)])
         except subprocess.CalledProcessError as err:
             LOGGER.warn(err.output.strip())
-    time.sleep(0.1)
     # force quit remaining matches
 #    nasties = pgrep(username, process)
 #    if not nasties:

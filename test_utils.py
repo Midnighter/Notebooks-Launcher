@@ -91,7 +91,7 @@ def check_add_password(username, plain_pw):
 def check_delete_user(username):
     # is there a faster and better (platform independent) check?
     for group in grp.getgrall():
-        nt.assert_not_in(username, group.gr_mem)
+        nt.assert_false(username in group.gr_mem)
     nt.assert_raises(KeyError, pwd.getpwnam, username)
     nt.assert_false(os.path.exists(os.path.expanduser("~{0}".format(username))))
 
