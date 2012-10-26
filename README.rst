@@ -23,7 +23,7 @@ alternative configuration file may be supplied as an argument.::
   username to be present (in future email may be used to send login information
   to users directly).
 
-* **setup** will genereate system accounts for the users.
+* **setup** will generate system accounts for the users.
   Passwords for the system and to protect the ipython notebook are generated. If
   the IPython profile specified in the `config file` exists for the local user,
   the `*.py` files and the `startup/*.py` files are copied to the other users.
