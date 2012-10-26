@@ -42,18 +42,8 @@ def add_user(username, *args):
 #                "RealName", "%s %s" % (user["name"], user["surname"])])
         # find a unique uid still a limited and potentially slow approach
         new_uid = random.randint(501, 3000)
-        try:
-            execute_command(["id", str(new_uid)])
-            exists = True
-        except subprocess.CalledProcessError:
-            exists = False
-        while exists:
+        while subprocess.call(["id", str(new_uid)]) == 0:
             new_uid = random.randint(501, 3000)
-            try:
-                execute_command(["id", str(new_uid)])
-                exists = True
-            except subprocess.CalledProcessError:
-                exists = False
         # set new unique user ID
         execute_command(["dscl", ".", "-create", user, "UniqueID", str(new_uid)])
         # set user's group ID property
@@ -82,18 +72,8 @@ def add_group(groupname):
         execute_command(["dscl", ".", "-create", group])
         # find a unique gid; still a limited and potentially slow approach
         new_gid = random.randint(501, 3000)
-        try:
-            execute_command(["id", str(new_gid)])
-            exists = True
-        except subprocess.CalledProcessError:
-            exists = False
-        while exists:
+        while subprocess.call(["id", str(new_gid)]) == 0:
             new_gid = random.randint(501, 3000)
-            try:
-                execute_command(["id", str(new_gid)])
-                exists = True
-            except subprocess.CalledProcessError:
-                exists = False
         # set new unique gid
         execute_command(["dscl", ".", "-append", group, "gid", str(new_gid)])
         # is setting a password necessary?

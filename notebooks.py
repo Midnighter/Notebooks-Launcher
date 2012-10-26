@@ -277,6 +277,13 @@ def assume_user(uid, gid):
     """
     Simple helper that returns a function that will be called by subprocess
     pipes just prior to executing their command.
+
+    Parameters
+    ----------
+    uid: `int`
+        User ID under which a function will be run.
+    gid: `int`
+        Group ID under which a function will be run.
     """
     def result():
         os.setgid(gid)
@@ -343,11 +350,18 @@ def execute_command(args, stdin=None, cwd=None, env=None):
 
 def create_user_environment(user, config):
     """
-    Sets up the user working directories needed.
+    Sets up the user working directories as needed.
 
     Creates a user account if necessary, creates a password for it, adds it to
-    a general usergroup, copies specified material into the user directory, and
-    makes the user the owner of those files and directories.
+    a general usergroup, creates an IPython profile, and makes the user the
+    owner of those files and directories.
+
+    Parameters
+    ----------
+    user: `dict`
+        A dictionary as parsed from the database describing a user.
+    config: `dict`
+        A dictionary as parsed from the configuration file.
     """
     # check for existance of user
     try:
@@ -405,12 +419,60 @@ def create_user_environment(user, config):
     location = os.path.join(usr_prfl_loc, u"ipython_notebook_config.py")
     with codecs.open(location, "rb", encoding="utf-8") as file_handle:
         content = file_handle.readlines()
-    for (i, line) in enumerate(content):
-        if line.find(u"c.NotebookApp.password") > -1:
-            break
-    content[i] = u"c.NotebookApp.password = u'{0}'".format(password)
+    if content:
+        i = 0
+        for (i, line) in enumerate(content):
+            if line.find(u"c.NotebookApp.password") > -1:
+                break
+        content[i] = u"c.NotebookApp.password = u'{0}'".format(password)
     with codecs.open(location, "wb", encoding="utf-8") as file_handle:
         file_handle.writelines(content)
+
+def setup(config, users):
+    """
+    Adds a general usergroup, creates each student as a system user, creates
+    IPython profile.
+
+    Parameters
+    ----------
+    config: `dict`
+        A dictionary as parsed from the configuration file.
+    users: `list`
+        A list of dictionaries as parsed from the database describing individual
+        users.
+    """
+    # should add the group if it doesn't exist already
+    rc = add_group(config["group"])
+    if rc != 0:
+        raise OSError("failed to add new group '{0}'".format(config["group"]))
+    # create users in the list
+    for usr in users:
+        if create_user_environment(usr, config) > 0:
+            LOGGER.warn(u"Failed to setup environment for user '{0}'.".format(
+                    usr["username"]))
+        else:
+            LOGGER.info(u"Setup environment for user '{0}'."\
+                    .format(usr["username"]))
+
+
+################################################################################
+# Send
+################################################################################
+
+
+def send_out(user, config):
+    """
+    Copies material to user account and makes the user owner of it.
+
+    Parameters
+    ----------
+    user: `dict`
+        A dictionary as parsed from the database describing a user.
+    config: `dict`
+        A dictionary as parsed from the configuration file.
+    """
+    # must not fail
+    pw_entry = pwd.getpwnam(user["username"])
     # copy content of material dir into user directory
     destination_path = os.path.normpath(os.path.join(pw_entry.pw_dir,
             config["tutorial dir"]))
@@ -426,22 +488,25 @@ def create_user_environment(user, config):
     # change the owner of the files in the user directory
     tree_chown(pw_entry, destination_path)
 
-def setup(config, users):
+def send(config, users):
     """
-    Parse the student file, parse the configuration, adds the general usergroup,
-    creates each student as a system user, writes out information.
+    Copy course material to user accounts.
+
+    Parameters
+    ----------
+    config: `dict`
+        A dictionary as parsed from the configuration file.
+    users: `list`
+        A list of dictionaries as parsed from the database describing individual
+        users.
     """
-    # should add the group if it doesn't exist already
-    rc = add_group(config["group"])
-    if rc != 0:
-        raise OSError("failed to add new group '{0}'".format(config["group"]))
-    # create users in the list
     for usr in users:
-        if create_user_environment(usr, config) > 0:
-            LOGGER.warn(u"Failed to setup environment for user '{0}'.".format(
-                    usr["username"]))
-        else:
-            LOGGER.info(u"Setup environment for user '{0}'."\
+        try:
+            send_out(usr, config)
+            LOGGER.info(u"Sent material to user '{0}'.".format(usr["username"]))
+        except OSError:
+            LOGGER.debug(u"pssst:", exc_info=True)
+            LOGGER.warn(u"Sending files to user '{0}' failed."\
                     .format(usr["username"]))
 
 
@@ -477,6 +542,13 @@ def launch_user_instance(user, config):
     """
     Launches an IPython Notebook for a specified user in an environment defined
     by config.
+
+    Parameters
+    ----------
+    user: `dict`
+        A dictionary as parsed from the database describing a user.
+    config: `dict`
+        A dictionary as parsed from the configuration file.
     """
     # must not fail, should have been taken care of by setup script
     pw_entry = pwd.getpwnam(user["username"])
@@ -500,6 +572,14 @@ def launch(config, users):
     """
     Start notebook kernels for each user and launch a website from which to
     reach them.
+
+    Parameters
+    ----------
+    config: `dict`
+        A dictionary as parsed from the configuration file.
+    users: `list`
+        A list of dictionaries as parsed from the database describing individual
+        users.
 
     Notes
     -----
@@ -527,12 +607,40 @@ def launch(config, users):
 ################################################################################
 
 
-def kill_notebooks(user, config):
+def shutdown(config, users):
     """
-    Finds IPython Notebook instances running for the user and kills them.
+    Shutdown each user's notebook kernel(s).
+
+    Parameters
+    ----------
+    config: `dict`
+        A dictionary as parsed from the configuration file.
+    users: `list`
+        A list of dictionaries as parsed from the database describing individual
+        users.
     """
-    # must not fail, i.e., user must exist on the system
-    rc = kill_process(user["username"], "ipython notebook")
+    for usr in users:
+        kill_process(usr["username"], "ipython notebook")
+        LOGGER.info(u"Shutdown notebook kernel(s) for user '{0}'."\
+                .format(usr["username"]))
+
+
+################################################################################
+# Retrieve
+################################################################################
+
+
+def retrieve_from(user, config):
+    """
+    Retrieve all data in the material directory of the user.
+
+    Parameters
+    ----------
+    user: `dict`
+        A dictionary as parsed from the database describing a user.
+    config: `dict`
+        A dictionary as parsed from the configuration file.
+    """
     # retrieve user generated material
     try:
         pw_entry = pwd.getpwnam(user["username"])
@@ -554,15 +662,6 @@ def kill_notebooks(user, config):
         LOGGER.warn(u"Retrieving files for user '{0}' failed."\
                 .format(user["username"]))
     user["port"] = u""
-
-def shutdown(config, users):
-    """
-    Shutdown each user's notebook kernel and retrieve their existing material.
-    """
-    for usr in users:
-        kill_notebooks(usr, config)
-        LOGGER.info(u"Shutdown notebook kernel(s) for user '{0}'."\
-                .format(usr["username"]))
     # change the owner of the files in the storage directory
     try:
         owner_entry = pwd.getpwnam(config["owner"])
@@ -570,7 +669,23 @@ def shutdown(config, users):
         LOGGER.warn(u"Failed to get passwd entry for owner '{0}',"\
                 u" did you set it in the config file?".format(config["owner"]))
         return
-    tree_chown(owner_entry, config["storage dir"])
+    tree_chown(owner_entry, dest_path)
+
+def retrieve(config, users):
+    """
+    Retrieve created files from users.
+
+    Parameters
+    ----------
+    config: `dict`
+        A dictionary as parsed from the configuration file.
+    users: `list`
+        A list of dictionaries as parsed from the database describing individual
+        users.
+    """
+    for usr in users:
+        retrieve_from(usr, config)
+        LOGGER.info(u"Retrieved files from user '{0}'.".format(usr["username"]))
 
 
 ################################################################################
@@ -581,6 +696,14 @@ def shutdown(config, users):
 def remove(config, users):
     """
     Remove all files and accounts of users listed in the database file.
+
+    Parameters
+    ----------
+    config: `dict`
+        A dictionary as parsed from the configuration file.
+    users: `list`
+        A list of dictionaries as parsed from the database describing individual
+        users.
     """
     for usr in users:
         delete_user(usr)
@@ -596,6 +719,10 @@ def remove(config, users):
 
 
 def main(argv):
+    """
+    Handles configuration and user database parsing and writing, and calls
+    chosen program function.
+    """
     LOGGER.setLevel(logging.INFO)
 #    LOGGER.setLevel(logging.DEBUG)
     LOGGER.addHandler(logging.StreamHandler())
@@ -618,10 +745,14 @@ def main(argv):
         # call appropriate function
         if argv[0].lower() == "setup":
             setup(config, users)
+        elif argv[0].lower() == "send":
+            send(config, users)
         elif argv[0].lower() == "launch":
             launch(config, users)
         elif argv[0].lower() == "shutdown":
             shutdown(config, users)
+        elif argv[0].lower() == "retrieve":
+            retrieve(config, users)
         elif argv[0].lower() == "remove":
             remove(config, users)
         else:
@@ -637,12 +768,14 @@ def main(argv):
 if __name__ == "__main__":
     argc = len(sys.argv)
     if argc < 2 or argc > 3:
-        LOGGER.critical(u"Usage:\nsudo python {0} <setup | launch | shutdown | remove>"\
+        LOGGER.critical(u"Usage:\nsudo python {0} <setup | send | launch |"\
+                u" shutdown | retrieve | remove>"\
                 u" [config file: path]".format(sys.argv[0]))
         sys.exit(2)
+    rec = 0
     try:
-        rec = main(sys.argv[1:])
-    except (Exception) as err:
+        main(sys.argv[1:])
+    except Exception as err:
         rec = err.errno if hasattr(err, "errno") else 1
         LOGGER.critical(str(err))
     finally:
