@@ -23,28 +23,28 @@ alternative configuration file may be supplied as an argument.::
   username to be present (in future email may be used to send login information
   to users directly).
 
-* **`setup`** will genereate system accounts for the users.
+* **setup** will genereate system accounts for the users.
   Passwords for the system and to protect the ipython notebook are generated. If
   the IPython profile specified in the `config file` exists for the local user,
   the `*.py` files and the `startup/*.py` files are copied to the other users.
 
-* **`send`** will use a predefined directory and copy the material therein into each
+* **send** will use a predefined directory and copy the material therein into each
   users' account. **Copying of files will be done without mercy for existing
   files!**
 
-* **`launch`** assigns a unique port to each user in a dumb way. It does not check
+* **launch** assigns a unique port to each user in a dumb way. It does not check
   whether the port is in use. IPython may check it but the change in port is not
   recognised. At the end a webserver will be launched that should direct each
   user to their specific notebook instance. The Python process will continue to
   run until terminated which shuts down the webserver.
 
-* **`shutdown`** kills all IPython notebook kernels running under the user
+* **shutdown** kills all IPython notebook kernels running under the user
   names provided, so be careful!
 
-* **`retrieve`** will copy the user generated files in the specified tutorial
+* **retrieve** will copy the user generated files in the specified tutorial
   directory back into the owner's storage area for evaluation.
 
-* **`remove`** will **delete all user accounts including their home directories**, be
+* **remove** will **delete all user accounts including their home directories**, be
   absolutely sure you want to do this!
 
 * Sample students.csv and notebooks.cfg files are provided.
