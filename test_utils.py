@@ -72,7 +72,7 @@ def check_add_user(username, args):
 #    nt.assert_equal(pw_entry.pw_uid, grp_entry.gr_gid)
     for group in args:
         secondary = grp.getgrnam(group)
-        nt.assert_in(username, secondary.gr_mem)
+        nt.assert_true(username in secondary.gr_mem)
 
 def check_add_password(username, plain_pw):
     pw_entry = pwd.getpwnam(username)
@@ -94,7 +94,7 @@ def check_add_group(group):
 
 def check_append_to_group(group, username):
     gr_entry = grp.getgrnam(group)
-    nt.assert_in(username, gr_entry.gr_mem)
+    nt.assert_true(username in gr_entry.gr_mem)
 
 def check_delete_group(group):
     nt.assert_raises(KeyError, grp.getgrnam, group)
