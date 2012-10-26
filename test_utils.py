@@ -77,10 +77,16 @@ def check_add_user(username, args):
 def check_add_password(username, plain_pw):
     pw_entry = pwd.getpwnam(username)
     crypted_pw = pw_entry.pw_passwd
-    if pw_entry.pw_passwd in ("x", "*"):
-        from spwd import getspnam
-        crypted_pw = getspnam(username).sp_pwd
-    nt.assert_equal(crypt(plain_pw, crypted_pw), crypted_pw)
+    run = True
+    if pw_entry.pw_passwd in ("x", "*", "********"):
+        try:
+            from spwd import getspnam
+        except ImportError:
+            run = False
+        else:
+            crypted_pw = getspnam(username).sp_pwd
+    if run:
+        nt.assert_equal(crypt(plain_pw, crypted_pw), crypted_pw)
 
 def check_delete_user(username):
     # is there a faster and better (platform independent) check?
