@@ -142,7 +142,9 @@ def delete_user(usr):
     try:
         # remove user from all secondary groups
         groups = execute_command(["id", "-nG", usr["username"]])
-        for grp in groups.split():
+        groups = set(groups.split())
+        groups.remove("staff")
+        for grp in groups:
             execute_command(["dscl", ".", "-delete",
                     "/Groups/{0}".format(grp), "GroupMembership", usr["username"]])
         # delete the passwd entry
