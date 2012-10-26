@@ -1,6 +1,6 @@
-===============================
-IPython Notebook Infrastructure
-===============================
+==========================
+IPython Notebooks Launcher
+==========================
 
 
 Outline
@@ -8,6 +8,13 @@ Outline
 
 The purpose of this repository is to facilitate setting up separate IPython
 notebook kernels for a list of users on one host machine.
+
+Compatibility
+-------------
+
+*Should* work for:
+* most Linux flavours
+* Mac OS
 
 Usage
 -----

@@ -23,7 +23,6 @@ if os.geteuid() != 0:
     raise StandardError("You need to have superuser privileges to run these tests.")
 
 import pwd
-import spwd
 import grp
 import nose.tools as nt
 
@@ -79,7 +78,8 @@ def check_add_password(username, plain_pw):
     pw_entry = pwd.getpwnam(username)
     crypted_pw = pw_entry.pw_passwd
     if pw_entry.pw_passwd in ("x", "*"):
-        crypted_pw = spwd.getspnam(username).sp_pwd
+        from spwd import getspnam
+        crypted_pw = getspnam(username).sp_pwd
     nt.assert_equal(crypt(plain_pw, crypted_pw), crypted_pw)
 
 def check_delete_user(username):
