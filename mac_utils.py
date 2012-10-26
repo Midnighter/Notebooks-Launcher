@@ -144,9 +144,11 @@ def delete_user(usr):
         groups = execute_command(["id", "-nG", usr["username"]])
         groups = set(groups.split())
         groups.remove("staff")
-        for grp in groups:
+        for group in groups:
+            if grp.getgrnam(group).gr_gid < 500:
+                continue
             execute_command(["dscl", ".", "-delete",
-                    "/Groups/{0}".format(grp), "GroupMembership", usr["username"]])
+                    "/Groups/{0}".format(group), "GroupMembership", usr["username"]])
         # delete the passwd entry
         execute_command(["dscl", ".", "-delete",
                 "/Users/{0}".format(usr["username"]), "Password"])
