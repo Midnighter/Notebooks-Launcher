@@ -723,9 +723,6 @@ def main(argv):
     Handles configuration and user database parsing and writing, and calls
     chosen program function.
     """
-    LOGGER.setLevel(logging.INFO)
-#    LOGGER.setLevel(logging.DEBUG)
-    LOGGER.addHandler(logging.StreamHandler())
     # basic sanity checks
     # check for privileges
     if os.geteuid() != 0:
@@ -766,6 +763,9 @@ def main(argv):
 
 
 if __name__ == "__main__":
+    LOGGER.setLevel(logging.INFO)
+#    LOGGER.setLevel(logging.DEBUG)
+    LOGGER.addHandler(logging.StreamHandler())
     argc = len(sys.argv)
     if argc < 2 or argc > 3:
         LOGGER.critical(u"Usage:\nsudo python {0} <setup | send | launch |"\
