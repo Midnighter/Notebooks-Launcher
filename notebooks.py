@@ -38,13 +38,6 @@ import socket
 
 from glob import glob
 
-if os.uname()[0] == "Linux":
-    from linux_utils import *
-elif os.uname()[0] == "Darwin":
-    from mac_utils import *
-else:
-    raise StandardError("unkown operating system")
-
 # non-standard but must for ipython notebook
 import tornado.ioloop
 import tornado.web
@@ -710,7 +703,10 @@ def remove(config, users):
         users.
     """
     for usr in users:
-        delete_user(usr)
+        rc = delete_user(usr["username"])
+        if rc == 0:
+            usr["sys-pass"] = ""
+            usr["nb-pass"] = ""
     choice = raw_input("Do you really want to remove the group '{0}'? (y/[n]):"\
             .format(config["group"]))
     if choice.lower() == "y":
@@ -776,6 +772,12 @@ if __name__ == "__main__":
                 u" shutdown | retrieve | remove>"\
                 u" [config file: path]".format(sys.argv[0]))
         sys.exit(2)
+    if os.uname()[0] == "Linux":
+        from linux_utils import *
+    elif os.uname()[0] == "Darwin":
+        from mac_utils import *
+    else:
+        raise StandardError("unkown operating system")
     rec = 0
     try:
         main(sys.argv[1:])

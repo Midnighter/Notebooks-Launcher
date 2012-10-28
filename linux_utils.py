@@ -97,18 +97,16 @@ def kill_process(username, process):
         LOGGER.warn(u"User '{0}' still has running notebook kernel(s).".format(
                 username))
 
-def delete_user(usr):
+def delete_user(username):
     rc = 0
     try:
         # remove the user from all secondary groups
-        execute_command(["usermod", "-G", usr["username"], usr["username"]])
+        execute_command(["usermod", "-G", username, username])
         # delete the passwd entry
-        execute_command(["passwd", "-d", usr["username"]])
-        usr["sys-pass"] = ""
+        execute_command(["passwd", "-d", username])
         # delete the user account
-        execute_command(["userdel", "-r", usr["username"]])
-        usr["nb-pass"] = ""
-        LOGGER.info(u"Removed user '%s'.", usr["username"])
+        execute_command(["userdel", "-r", username])
+        LOGGER.info(u"Removed user '%s'.", username)
     except subprocess.CalledProcessError as err:
         LOGGER.debug(u"pssst:", exc_info=True)
         LOGGER.warn(err.output.strip())

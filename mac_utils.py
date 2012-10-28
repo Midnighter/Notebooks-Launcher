@@ -41,7 +41,8 @@ def add_user(username, *args):
 #        execute_command(["dscl", ".", "-create", "/Users/%s" % user["username"],
 #                "RealName", "%s %s" % (user["name"], user["surname"])])
         # find a unique uid still a limited and potentially slow approach
-        new_uid = max(pw_entry.pw_uid for pw_entry in pwd.getpwall()) + 1
+        new_uid = max(pw_entry.pw_uid for pw_entry in pwd.getpwall())
+        new_uid = max(new_uid, 500) + 1
         # set new unique user ID
         execute_command(["dscl", ".", "-create", user, "UniqueID", str(new_uid)])
         # set user's primary group ID property to be 'staff'
@@ -49,8 +50,7 @@ def add_user(username, *args):
         execute_command(["dscl", ".", "-create", user, "PrimaryGroupID",
                 str(staff.gr_gid)])
         # set home directory
-        execute_command(["dscl", ".", "-create", user, "NFSHomeDirectory",
-            "/Local{0}".format(user)])
+        execute_command(["dscl", ".", "-create", user, "NFSHomeDirectory", user])
         # still need to create $HOME?
         execute_command(["createhomedir", "-c"])
         # add user to secondary group(s)
@@ -70,7 +70,8 @@ def add_group(groupname):
         # create the new group
         execute_command(["dscl", ".", "-create", group])
         # find a unique gid; still a limited and potentially slow approach
-        new_gid = max(gr_entry.gr_gid for gr_entry in grp.getgrall()) + 1
+        new_gid = max(gr_entry.gr_gid for gr_entry in grp.getgrall())
+        new_gid = max(new_gid, 500) + 1
         # set new unique gid
         execute_command(["dscl", ".", "-append", group, "gid", str(new_gid)])
         # is setting a password necessary?
@@ -137,30 +138,39 @@ def kill_process(username, process):
         LOGGER.warn(u"User '{0}' still has running notebook kernel(s).".format(
                 username))
 
-def delete_user(usr):
+def delete_user(username):
     rc = 0
+    user = "/Users/{0}".format(username)
     try:
         # remove user from all secondary groups
-        groups = execute_command(["id", "-nG", usr["username"]])
-        groups = set(groups.split())
-        groups.remove("staff")
+        groups = [group for group in grp.getgrall() if username in group.gr_mem]
+#        groups = execute_command(["dscl", ".", "-search", "/Groups", username])
+        # id also returns system groups: unsuitable
+#        groups = execute_command(["id", "-nG", usr["username"]])
+#        groups = set(groups.split())
+#        groups.remove("staff")
         for group in groups:
-            if grp.getgrnam(group).gr_gid < 500:
-                continue
-            execute_command(["dscl", ".", "-delete",
-                    "/Groups/{0}".format(group), "GroupMembership", usr["username"]])
+#            if grp.getgrnam(group).gr_gid < 500:
+#                continue
+            try:
+                execute_command(["dscl", ".", "-delete",
+                    "/Groups/{0}".format(group.gr_name), "GroupMembership",
+                    username])
+            except subprocess.CalledProcessError:
+                LOGGER.debug(u"pssst:", exc_info=True)
         # delete the passwd entry
-        execute_command(["dscl", ".", "-delete",
-                "/Users/{0}".format(usr["username"]), "Password"])
+        uuid = execute_command(["dscl", ".", "-read", user, "GeneratedUID"])
+        uuid = uuid.split(":")[1].strip()
+        execute_command(["rm", "-f",
+                "/private/var/db/shadow/hash/{0}".format(uuid)])
         # delete the primary group
-        execute_command(["dscl", ".", "-delete",
-                "/Groups/{0}".format(usr["username"])])
+#        execute_command(["dscl", ".", "-delete",
+#                "/Groups/{0}".format(usr["username"])])
         # delete the user
-        execute_command(["dscl", ".", "-delete",
-                "/Users/{0}".format(usr["username"])])
-        usr["sys-pass"] = ""
-        usr["nb-pass"] = ""
-        LOGGER.info(u"Removed user '{0}'.".format(usr["username"]))
+        execute_command(["dscl", ".", "-delete", user])
+        # delete home dir
+        execute_command(["rm", "-rf", user])
+        LOGGER.info(u"Removed user '{0}'.".format(username))
     except subprocess.CalledProcessError as err:
         LOGGER.debug(u"pssst:", exc_info=True)
         LOGGER.warn(err.output.strip())

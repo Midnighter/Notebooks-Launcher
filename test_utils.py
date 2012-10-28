@@ -37,9 +37,8 @@ else:
 
 
 def test_user():
-    user1 = {"username": "foo", "sys-pass": "fooman", "nb-pass": "",
-            "secondary": ()}
-    user2 = {"username": "bar", "sys-pass": "barman", "nb-pass": "",
+    user1 = {"username": "foo", "sys-pass": "fooman", "secondary": ()}
+    user2 = {"username": "bar", "sys-pass": "barman",
             "secondary": ("labtools", "labrats")}
     tests = [user1, user2]
     groups = set()
@@ -58,7 +57,7 @@ def test_user():
         for group in groups:
             append_to_group(group, user["username"])
             yield check_append_to_group, group, user["username"]
-        delete_user(user)
+        delete_user(user["username"])
         yield check_delete_user, user["username"]
     for group in groups:
         delete_group(group)
@@ -66,6 +65,8 @@ def test_user():
 
 
 def check_add_user(username, args):
+    reload(pwd)
+    reload(grp)
     pw_entry = pwd.getpwnam(username)
     nt.assert_true(os.path.exists(pw_entry.pw_dir))
 #    grp_entry = grp.getgrnam(username)
@@ -75,6 +76,7 @@ def check_add_user(username, args):
         nt.assert_true(username in secondary.gr_mem)
 
 def check_add_password(username, plain_pw):
+    reload(pwd)
     pw_entry = pwd.getpwnam(username)
     crypted_pw = pw_entry.pw_passwd
     run = True
@@ -89,6 +91,8 @@ def check_add_password(username, plain_pw):
         nt.assert_equal(crypt(plain_pw, crypted_pw), crypted_pw)
 
 def check_delete_user(username):
+    reload(pwd)
+    reload(grp)
     # is there a faster and better (platform independent) check?
     for group in grp.getgrall():
         nt.assert_false(username in group.gr_mem)
@@ -96,12 +100,15 @@ def check_delete_user(username):
     nt.assert_false(os.path.exists(os.path.expanduser("~{0}".format(username))))
 
 def check_add_group(group):
+    reload(grp)
     grp.getgrnam(group)
 
 def check_append_to_group(group, username):
+    reload(grp)
     gr_entry = grp.getgrnam(group)
     nt.assert_true(username in gr_entry.gr_mem)
 
 def check_delete_group(group):
+    reload(grp)
     nt.assert_raises(KeyError, grp.getgrnam, group)
 
