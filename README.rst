@@ -15,7 +15,14 @@ Compatibility
 *Should* work for:
 
 * most Linux flavours
-* Mac OS
+* Mac OS (tested on 10.8)
+
+Tests
+-----
+
+Currently, the test script fails a number of tests on Mac but everything works
+smoothly when the exact same sequence of commands is run interactively. Also,
+running the test cases still manages to add and remove the users and groups.
 
 Usage
 -----

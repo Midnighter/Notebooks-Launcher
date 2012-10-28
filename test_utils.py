@@ -22,6 +22,7 @@ import os
 if os.geteuid() != 0:
     raise StandardError("You need to have superuser privileges to run these tests.")
 
+import time
 import pwd
 import grp
 import nose.tools as nt
@@ -82,6 +83,7 @@ def check_add_password(username, plain_pw):
     run = True
     if pw_entry.pw_passwd in ("x", "*", "********"):
         try:
+            # spwd not directly available on Mac
             from spwd import getspnam
         except ImportError:
             run = False
