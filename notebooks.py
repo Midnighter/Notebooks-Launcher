@@ -365,7 +365,7 @@ def create_user_environment(user, config):
         pw_entry = pwd.getpwnam(user["username"])
     except KeyError:
         # add a new user
-        rc = add_user(user["username"], config["group"])
+        rc = add_user(user["username"], uid=user["uid"], secondary=config["group"])
         if rc != 0:
             return rc
         # set the (weak) password using numbers, letters, and the exclamation
@@ -443,13 +443,17 @@ def setup(config, users):
     if rc != 0:
         raise OSError("failed to add new group '{0}'".format(config["group"]))
     # create users in the list
+    # mac hack, because mac pwd database does not update
+    uid = 501
     for usr in users:
+        usr["uid"] = uid
         if create_user_environment(usr, config) > 0:
             LOGGER.warn(u"Failed to setup environment for user '{0}'.".format(
                     usr["username"]))
         else:
             LOGGER.info(u"Setup environment for user '{0}'."\
                     .format(usr["username"]))
+        uid = usr["uid"] + 1
 
 
 ################################################################################

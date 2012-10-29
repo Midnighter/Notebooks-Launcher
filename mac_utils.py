@@ -29,7 +29,7 @@ import pwd
 LOGGER = logging.getLogger()
 
 
-def add_user(username, *args):
+def add_user(username, uid=501, secondary=[]):
     rc = 0
     user = "/Users/{0}".format(username)
     try:
@@ -41,8 +41,12 @@ def add_user(username, *args):
 #        execute_command(["dscl", ".", "-create", "/Users/%s" % user["username"],
 #                "RealName", "%s %s" % (user["name"], user["surname"])])
         # find a unique uid still a limited and potentially slow approach
-        new_uid = max(pw_entry.pw_uid for pw_entry in pwd.getpwall())
-        new_uid = max(new_uid, 500) + 1
+        all_ids = set(pw_entry.pw_uid for pw_entry in pwd.getpwall())
+        if uid in all_ids:
+            new_uid = max(all_ids)
+            new_uid = max(new_uid, 500) + 1
+        else:
+            new_uid = uid
         # set new unique user ID
         execute_command(["dscl", ".", "-create", user, "UniqueID", str(new_uid)])
         # set user's primary group ID property to be 'staff'
@@ -54,7 +58,7 @@ def add_user(username, *args):
         # still need to create $HOME?
         execute_command(["createhomedir", "-c"])
         # add user to secondary group(s)
-        for group in args:
+        for group in secondary:
             execute_command(["dscl", ".", "-append", "/Groups/{0}".format(group),
                     "GroupMembership", username])
     except subprocess.CalledProcessError as err:

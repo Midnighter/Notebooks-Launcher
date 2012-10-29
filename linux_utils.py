@@ -30,10 +30,10 @@ import pexpect
 LOGGER = logging.getLogger()
 
 
-def add_user(username, *args):
+def add_user(username, uid=1000, secondary=[]):
     rc = 0
     try:
-        execute_command(["useradd", "-m", "-G", ",".join(args), username])
+        execute_command(["useradd", "-m", "-G", ",".join(secondary), username])
     except subprocess.CalledProcessError as err:
         LOGGER.debug(u"pssst:", exc_info=True)
         LOGGER.warn(err.output.strip())
