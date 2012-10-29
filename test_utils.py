@@ -22,19 +22,18 @@ import os
 if os.geteuid() != 0:
     raise StandardError("You need to have superuser privileges to run these tests.")
 
-import time
 import pwd
 import grp
 import nose.tools as nt
 
-from crypt import crypt
-
 if os.uname()[0] == "Linux":
-    from linux_utils import *
+    import linuxutils as usrt
 elif os.uname()[0] == "Darwin":
-    from mac_utils import *
+    import macutils as usrt
 else:
     raise StandardError("unkown operating system")
+
+from crypt import crypt
 
 
 def test_user():
@@ -42,26 +41,22 @@ def test_user():
     user2 = {"username": "bar", "sys-pass": "barman",
             "secondary": ("labtools", "labrats")}
     tests = [user1, user2]
-    groups = set()
-    for user in tests:
-        for group in user["secondary"]:
-            groups.add(group)
-    groups = tuple(groups)
+    groups = set(group for user in tests for group in user["secondary"])
     for group in groups:
-        add_group(group)
+        usrt.add_group(group)
         yield check_add_group, group
     for user in tests:
-        add_user(user["username"], *user["secondary"])
+        usrt.add_user(user["username"], user["secondary"])
         yield check_add_user, user["username"], user["secondary"]
-        add_password(user["username"], user["sys-pass"])
+        usrt.add_password(user["username"], user["sys-pass"])
         yield check_add_password, user["username"], user["sys-pass"]
         for group in groups:
-            append_to_group(group, user["username"])
+            usrt.append_to_group(group, user["username"])
             yield check_append_to_group, group, user["username"]
-        delete_user(user["username"])
+        usrt.delete_user(user["username"])
         yield check_delete_user, user["username"]
     for group in groups:
-        delete_group(group)
+        usrt.delete_group(group)
         yield check_delete_group, group
 
 

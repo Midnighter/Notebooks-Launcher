@@ -13,7 +13,7 @@ Utility Functions for Linux
 :Copyright:
     Copyright(c) 2012 Jacobs University of Bremen. All rights reserved.
 :File:
-    linux_utils.py
+    linuxutils.py
 """
 
 
@@ -26,14 +26,19 @@ import subprocess
 import time
 import pexpect
 
+from genericutils import execute_command
+
 
 LOGGER = logging.getLogger()
 
 
-def add_user(username, uid=1000, secondary=[]):
+def add_user(username, secondary=[]):
     rc = 0
     try:
-        execute_command(["useradd", "-m", "-G", ",".join(secondary), username])
+        if secondary:
+            execute_command(["useradd", "-m", "-G", ",".join(secondary), username])
+        else:
+            execute_command(["useradd", "-m", username])
     except subprocess.CalledProcessError as err:
         LOGGER.debug(u"pssst:", exc_info=True)
         LOGGER.warn(err.output.strip())
@@ -91,7 +96,7 @@ def kill_process(username, process):
         execute_command(["pkill", "-u", username, "-f", process])
     except subprocess.CalledProcessError as err:
         LOGGER.warn(err.output.strip())
-    time.sleep(0.1)
+    time.sleep(0.2)
     # verify that indeed all processes have been terminated
     if 0 == subprocess.call(["pgrep", "-u", username, "-f", process]):
         LOGGER.warn(u"User '{0}' still has running notebook kernel(s).".format(
@@ -123,6 +128,4 @@ def delete_group(groupname):
         LOGGER.warn(err.output.strip())
         rc = err.returncode
     return rc
-
-from notebooks import execute_command
 

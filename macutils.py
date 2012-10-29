@@ -13,7 +13,7 @@ Utility Functions for Mac
 :Copyright:
     Copyright(c) 2012 Jacobs University of Bremen. All rights reserved.
 :File:
-    mac_utils.py
+    macutils.py
 """
 
 
@@ -25,11 +25,45 @@ import subprocess
 import grp
 import pwd
 
+from genericutils import execute_command
+
 
 LOGGER = logging.getLogger()
 
 
-def add_user(username, uid=501, secondary=[]):
+class GetUID(object):
+    """
+    """
+
+    uid = 501
+
+    def __init__(self, **kw_args):
+        super(GetUID, self).__init__(**kw_args)
+        all_ids = set(pw_entry.pw_uid for pw_entry in pwd.getpwall())
+        self.__class__.uid = max(self.__class__.uid, max(all_ids))
+
+    def __call__(self):
+        self.__class__.uid += 1
+        return self.__class__.uid
+
+
+class GetGID(object):
+    """
+    """
+
+    gid = 501
+
+    def __init__(self, **kw_args):
+        super(GetGID, self).__init__(**kw_args)
+        all_ids = max(gr_entry.gr_gid for gr_entry in grp.getgrall())
+        self.__class__.gid = max(self.__class__.gid, max(all_ids))
+
+    def __call__(self):
+        self.__class__.gid += 1
+        return self.__class__.gid
+
+
+def add_user(username, secondary=[]):
     rc = 0
     user = "/Users/{0}".format(username)
     try:
@@ -41,14 +75,9 @@ def add_user(username, uid=501, secondary=[]):
 #        execute_command(["dscl", ".", "-create", "/Users/%s" % user["username"],
 #                "RealName", "%s %s" % (user["name"], user["surname"])])
         # find a unique uid still a limited and potentially slow approach
-        all_ids = set(pw_entry.pw_uid for pw_entry in pwd.getpwall())
-        if uid in all_ids:
-            new_uid = max(all_ids)
-            new_uid = max(new_uid, 500) + 1
-        else:
-            new_uid = uid
+        new_uid = GetUID()
         # set new unique user ID
-        execute_command(["dscl", ".", "-create", user, "UniqueID", str(new_uid)])
+        execute_command(["dscl", ".", "-create", user, "UniqueID", str(new_uid())])
         # set user's primary group ID property to be 'staff'
         staff = grp.getgrnam("staff")
         execute_command(["dscl", ".", "-create", user, "PrimaryGroupID",
@@ -74,10 +103,9 @@ def add_group(groupname):
         # create the new group
         execute_command(["dscl", ".", "-create", group])
         # find a unique gid; still a limited and potentially slow approach
-        new_gid = max(gr_entry.gr_gid for gr_entry in grp.getgrall())
-        new_gid = max(new_gid, 500) + 1
+        new_gid = GetGID()
         # set new unique gid
-        execute_command(["dscl", ".", "-append", group, "gid", str(new_gid)])
+        execute_command(["dscl", ".", "-append", group, "gid", str(new_gid())])
         # is setting a password necessary?
 #        execute_command(["dscl", ".", "-append", group, "passwd", "*"])
     except subprocess.CalledProcessError as err:
@@ -192,6 +220,4 @@ def delete_group(groupname):
         LOGGER.warn(err.output.strip())
         rc = err.returncode
     return rc
-
-from notebooks import execute_command
 
