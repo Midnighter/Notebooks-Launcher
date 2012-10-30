@@ -106,7 +106,7 @@ def create_user_environment(user, config):
         return err.returncode
     # location of the ipython directory created with the profile
     # get_ipython_dir currently returns different results for other users :S
-    cmd = ["python", "ipython_dir.py"]
+    cmd = ["ipython_prfl_dir"]
     user_ipython_dir = gutil.launch_as(pw_entry, cmd, os.getcwd()).strip()
     # if the specified profile exists we copy the contents
     profile = "profile_{0}".format(config["profile"])

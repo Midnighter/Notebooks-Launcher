@@ -28,6 +28,8 @@ import string
 import shutil
 import ConfigParser
 
+from IPython.utils.path import get_ipython_dir
+
 
 LOGGER = logging.getLogger()
 
@@ -314,4 +316,7 @@ def execute_command(args, stdin=None, cwd=None, env=None):
         err.output = stderr
         raise err
     return stdout if stdout else stderr
+
+def ipython_dir_command():
+    print(get_ipython_dir())
 

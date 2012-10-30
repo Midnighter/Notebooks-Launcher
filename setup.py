@@ -30,6 +30,9 @@ setup(
     author_email = "moritz (dot) beber (at) gmail (dot) com",
     url = "https://github.com/Midnighter/Notebooks-Launcher",
     packages = ["nblauncher"],
-    entry_points = {"console_scripts": ["nblauncher = nblauncher.notebooks:main_command"]}
+    entry_points = {"console_scripts": [
+            "nblauncher = nblauncher.notebooks:main_command",
+            "ipython_dir = nblauncher.genericutils:ipython_dir_command"
+            ]}
     )
 

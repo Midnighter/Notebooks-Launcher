@@ -24,6 +24,17 @@ Currently, the test script fails a number of tests on Mac but everything works
 smoothly when the exact same sequence of commands is run interactively. Also,
 running the test cases still manages to add and remove the users and groups.
 
+Installation
+------------
+
+A setup script is provided::
+
+    [sudo] python setup.py install
+
+This will install the nblauncher package as well as two executables `nblauncher`
+and `ipython_dir`. The latter is necessary for the `nblauncher` to find the
+location of the IPython Home for all users.
+
 Usage
 -----
 
@@ -32,7 +43,7 @@ in six different ways. It always requires **superuser privileges** in order to
 run properly. Additionally, an alternative configuration file may be supplied
 as an argument.::
 
-    nblauncher <setup | send | launch | shutdown | retrieve | remove> [config file]
+    sudo nblauncher <setup | send | launch | shutdown | retrieve | remove> [config file]
 
 * Each invocation requires the file with the user database to be present. The
   order of the header line does not matter. Running `setup` requires only the
