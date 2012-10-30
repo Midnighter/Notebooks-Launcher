@@ -419,6 +419,7 @@ def remove(config, users):
             .format(", ".join(usr["username"] for usr in users)))
     if choice.lower() == "y":
         for usr in users:
+            retrieve_from(usr, config)
             rc = usrt.delete_user(usr["username"])
             if rc == 0:
                 usr["sys-pass"] = ""
