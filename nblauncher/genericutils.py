@@ -276,7 +276,7 @@ def interactive_tree_copy(src, dst, all_or_none=[False, False]):
                 shutil.copy2(src_path, dst)
         elif os.path.isdir(src_path):
             # continue down the directory
-            tree_copy(src_path, dst_path, all_or_none)
+            interactive_tree_copy(src_path, dst_path, all_or_none)
         # ignoring links and mount points
 
 def tree_chown(pw_entry, root):
