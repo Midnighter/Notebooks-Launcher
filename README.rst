@@ -27,11 +27,12 @@ running the test cases still manages to add and remove the users and groups.
 Usage
 -----
 
-There are six different ways to invoke the `notebooks.py` script and it always
-requires **superuser privileges** in order to run properly. Additionally, an
-alternative configuration file may be supplied as an argument.::
+Once installed, the program `nblauncher` becomes available which can be invoked
+in six different ways. It always requires **superuser privileges** in order to
+run properly. Additionally, an alternative configuration file may be supplied
+as an argument.::
 
-    notebooks.py <setup | send | launch | shutdown | retrieve | remove> [config file]
+    nblauncher <setup | send | launch | shutdown | retrieve | remove> [config file]
 
 * Each invocation requires the file with the user database to be present. The
   order of the header line does not matter. Running `setup` requires only the

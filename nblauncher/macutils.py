@@ -25,7 +25,7 @@ import subprocess
 import grp
 import pwd
 
-from genericutils import execute_command
+from .genericutils import execute_command
 
 
 LOGGER = logging.getLogger()
@@ -39,8 +39,8 @@ class GetUID(object):
 
     def __init__(self, **kw_args):
         super(GetUID, self).__init__(**kw_args)
-        all_ids = set(pw_entry.pw_uid for pw_entry in pwd.getpwall())
-        self.__class__.uid = max(self.__class__.uid, max(all_ids))
+        max_uid = max(pw_entry.pw_uid for pw_entry in pwd.getpwall())
+        self.__class__.uid = max(self.__class__.uid, max_uid)
 
     def __call__(self):
         self.__class__.uid += 1
@@ -55,8 +55,8 @@ class GetGID(object):
 
     def __init__(self, **kw_args):
         super(GetGID, self).__init__(**kw_args)
-        all_ids = max(gr_entry.gr_gid for gr_entry in grp.getgrall())
-        self.__class__.gid = max(self.__class__.gid, max(all_ids))
+        max_gid = max(gr_entry.gr_gid for gr_entry in grp.getgrall())
+        self.__class__.gid = max(self.__class__.gid, max_gid)
 
     def __call__(self):
         self.__class__.gid += 1

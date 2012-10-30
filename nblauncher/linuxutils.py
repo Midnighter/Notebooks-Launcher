@@ -26,7 +26,7 @@ import subprocess
 import time
 import pexpect
 
-from genericutils import execute_command
+from .genericutils import execute_command
 
 
 LOGGER = logging.getLogger()

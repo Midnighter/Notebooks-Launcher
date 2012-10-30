@@ -27,9 +27,9 @@ import grp
 import nose.tools as nt
 
 if os.uname()[0] == "Linux":
-    import linuxutils as usrt
+    from . import linuxutils as usrt
 elif os.uname()[0] == "Darwin":
-    import macutils as usrt
+    from . import macutils as usrt
 else:
     raise StandardError("unkown operating system")
 

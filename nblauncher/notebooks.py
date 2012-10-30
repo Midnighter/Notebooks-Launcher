@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 
@@ -29,12 +28,12 @@ import errno
 import random
 import codecs
 
-import genericutils as gutil
+import nblauncher.genericutils as gutil
 
 if os.uname()[0] == "Linux":
-    import linuxutils as usrt
+    import nblauncher.linuxutils as usrt
 elif os.uname()[0] == "Darwin":
-    import macutils as usrt
+    import nblauncher.macutils as usrt
 else:
     raise StandardError("unkown operating system")
 
@@ -475,7 +474,7 @@ def main(argv):
         gutil.write_database(config["user list"], users, csv_dialect)
 
 
-if __name__ == "__main__":
+def main_command():
     LOGGER.setLevel(logging.INFO)
 #    LOGGER.setLevel(logging.DEBUG)
     LOGGER.addHandler(logging.StreamHandler())
