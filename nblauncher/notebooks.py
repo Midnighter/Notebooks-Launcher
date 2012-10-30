@@ -106,7 +106,7 @@ def create_user_environment(user, config):
         return err.returncode
     # location of the ipython directory created with the profile
     # get_ipython_dir currently returns different results for other users :S
-    cmd = ["ipython_prfl_dir"]
+    cmd = ["ipython_dir"]
     user_ipython_dir = gutil.launch_as(pw_entry, cmd, os.getcwd()).strip()
     # if the specified profile exists we copy the contents
     profile = "profile_{0}".format(config["profile"])
@@ -160,6 +160,7 @@ def setup(config, users):
             LOGGER.warn(u"Failed to setup environment for user '{0}'.".format(
                     usr["username"]))
         else:
+            send_out(usr, config)
             LOGGER.info(u"Setup environment for user '{0}'."\
                     .format(usr["username"]))
 
@@ -189,7 +190,7 @@ def send_out(user, config):
     if not material:
         material = os.path.dirname(config["material dir"])
     try:
-        gutil.tree_copy(config["material dir"],
+        gutil.interactive_tree_copy(config["material dir"],
                 os.path.join(destination_path, material))
     except shutil.Error:
         raise OSError(errno.ENOENT,
@@ -414,11 +415,14 @@ def remove(config, users):
         A list of dictionaries as parsed from the database describing individual
         users.
     """
-    for usr in users:
-        rc = usrt.delete_user(usr["username"])
-        if rc == 0:
-            usr["sys-pass"] = ""
-            usr["nb-pass"] = ""
+    choice = raw_input("Do you really want to remove the users '{0}'? (y/[n]):"\
+            .format(", ".join(usr["username"] for usr in users)))
+    if choice.lower() == "y":
+        for usr in users:
+            rc = usrt.delete_user(usr["username"])
+            if rc == 0:
+                usr["sys-pass"] = ""
+                usr["nb-pass"] = ""
     choice = raw_input("Do you really want to remove the group '{0}'? (y/[n]):"\
             .format(config["group"]))
     if choice.lower() == "y":

@@ -218,6 +218,67 @@ def tree_copy(src, dst):
             tree_copy(src_path, os.path.join(dst, name))
         # ignoring links and mount points
 
+def interactive_tree_copy(src, dst, all_or_none=[False, False]):
+    """
+    Iteratively copies a folder structure to a destination rooted somewhere
+    else.
+
+    Parameters
+    ----------
+    src: `str`
+        Root of the file path hierarchy that is to be copied elsewhere.
+    dst: `str`
+        File path to which the source tree is added.
+    replace_all: `bool`
+        Whether to replace all existing files without asking.
+    replace_none: `bool`
+        Whether to never replace an existing file.
+
+    Notes
+    -----
+    Ignores symlinks and mount points.
+    """
+
+    def query():
+        choice = raw_input("Do you want to replace the file '{0}'? "\
+                "(y/[n]/All/Zero):".format(dst_path))
+        choice = choice.lower()
+        if not choice:
+            return False
+        elif choice[0] == "a":
+            all_or_none[0] = True
+            return True
+        elif choice[0] == "z":
+            all_or_none[1] = True
+            return False
+        elif choice[0] == "y":
+            return True
+        else:
+            return False
+
+    if not os.path.exists(dst):
+        os.makedirs(dst)
+    for name in os.listdir(src):
+        src_path = os.path.join(src, name)
+        dst_path = os.path.join(dst, name)
+        if os.path.isfile(src_path):
+            if os.path.exists(dst_path):
+                if all_or_none[0]:
+                    # copy file to destination
+                    shutil.copy2(src_path, dst)
+                elif all_or_none[1]:
+                    continue
+                elif query():
+                    # copy file to destination
+                    shutil.copy2(src_path, dst)
+            else:
+                # copy file to destination
+                shutil.copy2(src_path, dst)
+        elif os.path.isdir(src_path):
+            # continue down the directory
+            tree_copy(src_path, dst_path, all_or_none)
+        # ignoring links and mount points
+
 def tree_chown(pw_entry, root):
     """
     Iteratively descends a directory structure and changes the owner of all
